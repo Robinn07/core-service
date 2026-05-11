@@ -1,0 +1,32 @@
+{
+  "name": "project-root",
+  "version": "1.0.0",
+  "description": "Email service for getloopx",
+  "main": "src/server.js",
+  "type": "commonjs",
+  "scripts": {
+    "worker": "node src/workers/emailWorker.js",
+    "dev": "node src/server.js",
+    "test": "jest --detectOpenHandles"
+  },
+  "devDependencies": {
+    "jest": "^29.0.0",
+    "supertest": "^6.0.0"
+  },
+  "dependencies": {
+    "@aws-sdk/client-ses": "^3.0.0",
+    "@tanstack/react-query": "^5.100.9",
+    "amqplib": "^1.0.6",
+    "axios": "^1.16.0",
+    "bullmq": "^5.76.0",
+    "dotenv": "^16.0.0",
+    "express-rate-limit": "^8.3.2",
+    "firebase": "^12.12.1",
+    "firebase-admin": "^13.8.0",
+    "ioredis": "^5.0.0",
+    "next": "^16.2.5",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
+    "uuid": "^14.0.0"
+  }
+}

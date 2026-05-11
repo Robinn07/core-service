@@ -1,0 +1,13 @@
+node_modules/
+.env
+*.log
+logs/
+.DS_Store
+dist/
+build/
+serviceAccountKey.json
+.sequelizerc
+pm2-*.log
+.pm2/
+dump.pm2
+firebase-admin-sdk.json

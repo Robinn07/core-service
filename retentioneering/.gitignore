@@ -1,0 +1,13 @@
+# Firebase Keys — NEVER commit these
+**/serviceAccountKey.json
+
+# Python
+analytics-service/venv/
+__pycache__/
+*.pyc
+*.pyo
+.env
+
+# Node
+email-service/node_modules/
+*.log
