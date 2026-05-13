@@ -7,6 +7,7 @@ router.use(authenticate);
 
 router.post('/', domainController.addDomain);
 router.get('/', domainController.getDomains);
+router.get('/dashboard', domainController.getDeliverabilityDashboard);
 router.get('/:id/dns', domainController.getDomainDns);
 router.post('/:id/verify', domainController.verifyDomain);
 

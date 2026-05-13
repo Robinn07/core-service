@@ -61,3 +61,51 @@ exports.triggerAutomation = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
+
+exports.updateCanvas = async (req, res) => {
+  const { id } = req.params;
+  const { canvasState, actions } = req.body;
+  const { sequelize } = require('../models');
+
+  const transaction = await sequelize.transaction();
+
+  try {
+    const automation = await Automation.findOne({
+      where: { id, orgId: req.user.orgId }
+    });
+
+    if (!automation) {
+      return res.status(404).json({ error: 'Automation not found' });
+    }
+
+    // 1. Update Automation canvasState
+    await automation.update({ canvasState }, { transaction });
+
+    // 2. Clear existing actions
+    await AutomationAction.destroy({
+      where: { automationId: id },
+      transaction
+    });
+
+    // 3. Rebuild actions
+    if (actions && actions.length > 0) {
+      for (const actionData of actions) {
+        await AutomationAction.create({
+          ...actionData,
+          automationId: id
+        }, { transaction });
+      }
+    }
+
+    await transaction.commit();
+
+    const updatedAutomation = await Automation.findByPk(id, {
+      include: [{ model: AutomationAction, as: 'actions' }]
+    });
+
+    res.json(updatedAutomation);
+  } catch (error) {
+    await transaction.rollback();
+    res.status(500).json({ error: error.message });
+  }
+};

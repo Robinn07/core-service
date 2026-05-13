@@ -7,5 +7,7 @@ router.use(authenticate);
 
 router.post('/', templateController.createTemplate);
 router.get('/', templateController.getAllTemplates);
+router.get('/:id', templateController.getTemplateById);
+router.put('/:id', templateController.updateTemplate);
 
 module.exports = router;

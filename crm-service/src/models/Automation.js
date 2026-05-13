@@ -23,6 +23,10 @@ const Automation = sequelize.define('Automation', {
     type: DataTypes.JSONB,
     defaultValue: {}
   },
+  canvasState: {
+    type: DataTypes.JSONB,
+    defaultValue: {}
+  },
   active: {
     type: DataTypes.BOOLEAN,
     defaultValue: true

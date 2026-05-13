@@ -46,3 +46,63 @@ exports.verifyDomain = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
+
+exports.getDeliverabilityDashboard = async (req, res) => {
+  try {
+    const orgId = req.user.orgId || req.headers['x-org-id'];
+    const { EventLog, Domain } = require('../models');
+    const { Op } = require('sequelize');
+
+    // 1. Fetch Domain Health
+    const domains = await Domain.findAll({ where: { orgId } });
+    
+    // 2. Aggregate Reputation Metrics (Last 30 days)
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const stats = await EventLog.findAll({
+      where: {
+        orgId,
+        createdAt: { [Op.gte]: thirtyDaysAgo }
+      },
+      attributes: [
+        'type',
+        [require('../models').sequelize.fn('COUNT', require('../models').sequelize.col('id')), 'count']
+      ],
+      group: ['type']
+    });
+
+    const metrics = stats.reduce((acc, curr) => {
+      acc[curr.type] = parseInt(curr.get('count'));
+      return acc;
+    }, { DELIVERY: 0, BOUNCE: 0, COMPLAINT: 0, OPEN: 0, CLICK: 0 });
+
+    const totalSent = metrics.DELIVERY + metrics.BOUNCE;
+    const bounceRate = totalSent > 0 ? (metrics.BOUNCE / totalSent) * 100 : 0;
+    const spamRate = totalSent > 0 ? (metrics.COMPLAINT / totalSent) * 100 : 0;
+
+    res.json({
+      domains: domains.map(d => ({
+        id: d.id,
+        name: d.domainName,
+        status: d.verificationStatus,
+        isDefault: d.isDefault
+      })),
+      reputation: {
+        bounceRate: bounceRate.toFixed(2),
+        spamRate: spamRate.toFixed(2),
+        delivered: metrics.DELIVERY,
+        bounced: metrics.BOUNCE,
+        complaints: metrics.COMPLAINT,
+        totalSent
+      },
+      recommendations: [
+        bounceRate > 5 ? "Your bounce rate is high. Clean your subscriber list." : null,
+        spamRate > 0.1 ? "Your spam complaint rate is concerning. Review your opt-in process." : null,
+        domains.some(d => d.verificationStatus !== 'verified') ? "Complete DNS verification for all domains to improve deliverability." : null
+      ].filter(Boolean)
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};

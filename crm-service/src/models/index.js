@@ -13,6 +13,7 @@ const ApiKey = require('./ApiKey');
 const Form = require('./Form');
 const SuppressionList = require('./SuppressionList');
 const OrgConfig = require('./OrgConfig');
+const ConsentLog = require('./ConsentLog');
 
 // Subscriber <-> List (Many-to-Many)
 Subscriber.belongsToMany(List, { through: 'list_subscribers' });
@@ -49,6 +50,10 @@ AutomationAction.belongsTo(Automation, { foreignKey: 'automationId' });
 Template.hasMany(AutomationAction, { foreignKey: 'templateId' });
 AutomationAction.belongsTo(Template, { foreignKey: 'templateId' });
 
+// Subscriber <-> ConsentLog (One-to-Many)
+Subscriber.hasMany(ConsentLog, { foreignKey: 'subscriberId', as: 'consentLogs' });
+ConsentLog.belongsTo(Subscriber, { foreignKey: 'subscriberId' });
+
 module.exports = {
   Subscriber,
   List,
@@ -64,5 +69,6 @@ module.exports = {
   ApiKey,
   Form,
   SuppressionList,
-  OrgConfig
+  OrgConfig,
+  ConsentLog
 };

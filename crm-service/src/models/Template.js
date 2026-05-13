@@ -22,6 +22,18 @@ const Template = sequelize.define('Template', {
   htmlContent: {
     type: DataTypes.TEXT,
     allowNull: false
+  },
+  mjmlContent: {
+    type: DataTypes.TEXT,
+    allowNull: true
+  },
+  designData: {
+    type: DataTypes.JSONB,
+    defaultValue: {}
+  },
+  ampHtmlContent: {
+    type: DataTypes.TEXT,
+    allowNull: true
   }
 }, {
   timestamps: true,

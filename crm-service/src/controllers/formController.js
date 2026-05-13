@@ -2,7 +2,7 @@ const { Form } = require('../models');
 
 exports.createForm = async (req, res) => {
   try {
-    const { name, listId, fieldsConfig, successMessage } = req.body;
+    const { name, listId, fieldsConfig, successMessage, isLandingPage, slug, htmlContent } = req.body;
     const orgId = req.user?.orgId || req.headers['x-org-id'];
 
     const form = await Form.create({
@@ -10,7 +10,10 @@ exports.createForm = async (req, res) => {
       name,
       listId,
       fieldsConfig,
-      successMessage
+      successMessage,
+      isLandingPage,
+      slug,
+      htmlContent
     });
 
     res.status(201).json(form);
@@ -33,12 +36,12 @@ exports.updateForm = async (req, res) => {
   try {
     const { id } = req.params;
     const orgId = req.user?.orgId || req.headers['x-org-id'];
-    const { name, listId, fieldsConfig, successMessage, isActive } = req.body;
+    const { name, listId, fieldsConfig, successMessage, isActive, isLandingPage, slug, htmlContent } = req.body;
 
     const form = await Form.findOne({ where: { id, orgId } });
     if (!form) return res.status(404).json({ error: 'Form not found' });
 
-    await form.update({ name, listId, fieldsConfig, successMessage, isActive });
+    await form.update({ name, listId, fieldsConfig, successMessage, isActive, isLandingPage, slug, htmlContent });
     res.json(form);
   } catch (error) {
     res.status(500).json({ error: error.message });

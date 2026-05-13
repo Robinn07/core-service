@@ -33,6 +33,18 @@ const Form = sequelize.define('Form', {
   isActive: {
     type: DataTypes.BOOLEAN,
     defaultValue: true
+  },
+  isLandingPage: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false
+  },
+  slug: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  htmlContent: {
+    type: DataTypes.TEXT,
+    allowNull: true
   }
 }, {
   timestamps: true,

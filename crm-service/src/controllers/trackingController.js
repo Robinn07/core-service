@@ -5,9 +5,26 @@ const anomalyService = require('../services/anomalyService');
 const webhookService = require('../services/webhookService');
 const automationService = require('../services/automationService');
 const analyticsQueue = require('../queue/analyticsQueue');
+const geoip = require('geoip-lite');
+const UAParser = require('ua-parser-js');
+
+const parseMetadata = (ip, ua) => {
+  const geo = geoip.lookup(ip);
+  const parser = new UAParser(ua);
+  const device = parser.getDevice();
+  const os = parser.getOS();
+  const browser = parser.getBrowser();
+
+  return {
+    country: geo ? geo.country : null,
+    city: geo ? geo.city : null,
+    os: os.name ? `${os.name} ${os.version || ''}` : null,
+    browser: browser.name ? `${browser.name} ${browser.version || ''}` : null,
+    deviceType: device.type || 'desktop'
+  };
+};
 
 exports.trackOpen = async (req, res) => {
-// ... existing code
   const { logId } = req.params;
   const ipAddress = req.ip || req.headers['x-forwarded-for'] || req.connection.remoteAddress;
   const userAgent = req.headers['user-agent'];
@@ -15,6 +32,7 @@ exports.trackOpen = async (req, res) => {
   try {
     const log = await CampaignLog.findByPk(logId);
     if (log) {
+      const metadata = parseMetadata(ipAddress, userAgent);
       const eventData = {
         campaignId: log.campaignId,
         subscriberId: log.subscriberId,
@@ -22,7 +40,8 @@ exports.trackOpen = async (req, res) => {
         orgId: log.orgId || 'unknown',
         ab_variant: log.ab_variant,
         ipAddress,
-        userAgent
+        userAgent,
+        ...metadata
       };
 
       await EventLog.create({
@@ -79,6 +98,7 @@ exports.trackClick = async (req, res) => {
   try {
     const log = await CampaignLog.findByPk(logId);
     if (log) {
+      const metadata = parseMetadata(ipAddress, userAgent);
       const eventData = {
         campaignId: log.campaignId,
         subscriberId: log.subscriberId,
@@ -87,7 +107,8 @@ exports.trackClick = async (req, res) => {
         ab_variant: log.ab_variant,
         url,
         ipAddress,
-        userAgent
+        userAgent,
+        ...metadata
       };
 
       await EventLog.create({

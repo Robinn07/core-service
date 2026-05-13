@@ -16,6 +16,7 @@
   "dependencies": {
     "@aws-sdk/client-ses": "^3.0.0",
     "@tanstack/react-query": "^5.100.9",
+    "@xyflow/react": "^12.10.2",
     "amqplib": "^1.0.6",
     "axios": "^1.16.0",
     "bullmq": "^5.76.0",
@@ -23,7 +24,10 @@
     "express-rate-limit": "^8.3.2",
     "firebase": "^12.12.1",
     "firebase-admin": "^13.8.0",
+    "grapesjs": "^0.22.16",
+    "grapesjs-mjml": "^1.0.8",
     "ioredis": "^5.0.0",
+    "lucide-react": "^1.14.0",
     "next": "^16.2.5",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",

@@ -14,6 +14,7 @@ router.use(authenticate);
 // Standard CRUD
 router.post('/', subscriberController.createSubscriber);
 router.get('/', subscriberController.getAllSubscribers);
+router.get('/:id/export', subscriberController.exportData);
 router.get('/:id', subscriberController.getSubscriberById);
 router.put('/:id', subscriberController.updateSubscriber);
 router.delete('/:id', subscriberController.deleteSubscriber);

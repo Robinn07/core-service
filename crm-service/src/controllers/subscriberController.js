@@ -1,4 +1,4 @@
-const { Subscriber, List, Tag, EventLog } = require('../models');
+const { Subscriber, List, Tag, EventLog, ConsentLog } = require('../models');
 const { Op } = require('sequelize');
 const crmService = require('../services/crmService');
 const appEmitter = require('../utils/events');
@@ -7,23 +7,7 @@ const appEmitter = require('../utils/events');
  * @swagger
  * components:
  *   schemas:
- *     Subscriber:
- *       type: object
- *       required:
- *         - email
- *       properties:
- *         id:
- *           type: string
- *           format: uuid
- *         email:
- *           type: string
- *         firstName:
- *           type: string
- *         lastName:
- *           type: string
- *         status:
- *           type: string
- *           enum: [active, unsubscribed, bounced]
+// ...
  const doiService = require('../services/doiService');
 
  /**
@@ -35,6 +19,8 @@ const appEmitter = require('../utils/events');
    try {
      const { email, firstName, lastName, attributes, listIds, tagIds } = req.body;
      const orgId = req.user.orgId;
+     const ipAddress = req.ip || req.headers['x-forwarded-for'];
+     const userAgent = req.headers['user-agent'];
 
      let subscriber = await Subscriber.findOne({ where: { email, orgId } });
      if (subscriber) return res.status(400).json({ error: 'Subscriber already exists in this organization' });
@@ -46,6 +32,16 @@ const appEmitter = require('../utils/events');
        attributes, 
        orgId,
        status: 'pending' // Force pending until DOI confirmation
+     });
+
+     // Log Consent
+     await ConsentLog.create({
+       subscriberId: subscriber.id,
+       orgId,
+       source: req.user.role === 'admin' ? 'Dashboard/Admin' : 'API',
+       ipAddress,
+       userAgent,
+       consentType: 'SUBSCRIBE'
      });
 
      if (listIds && listIds.length > 0) await subscriber.addLists(listIds);
@@ -62,6 +58,66 @@ const appEmitter = require('../utils/events');
      });
    } catch (error) { res.status(500).json({ error: error.message }); }
  };
+
+exports.exportData = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const orgId = req.user.orgId;
+
+    const subscriber = await Subscriber.findOne({
+      where: { id, orgId },
+      include: [
+        { model: List, through: { attributes: [] } },
+        { model: Tag, through: { attributes: [] } },
+        { model: ConsentLog, as: 'consentLogs' },
+        { model: EventLog, limit: 100, order: [['createdAt', 'DESC']] }
+      ]
+    });
+
+    if (!subscriber) return res.status(404).json({ error: 'Subscriber not found' });
+
+    const exportBundle = {
+      profile: {
+        email: subscriber.email,
+        firstName: subscriber.firstName,
+        lastName: subscriber.lastName,
+        status: subscriber.status,
+        createdAt: subscriber.createdAt,
+        attributes: subscriber.attributes
+      },
+      intelligence: {
+        churnScore: subscriber.churnScore,
+        leadScore: subscriber.leadScore,
+        leadTemperature: subscriber.leadTemperature,
+        preferredSendHour: subscriber.preferredSendHour
+      },
+      memberships: {
+        lists: subscriber.Lists.map(l => l.name),
+        tags: subscriber.Tags.map(t => t.name)
+      },
+      auditTrail: subscriber.consentLogs.map(log => ({
+        source: log.source,
+        ip: log.ipAddress,
+        userAgent: log.userAgent,
+        timestamp: log.createdAt
+      })),
+      activity: subscriber.EventLogs.map(log => ({
+        event: log.type,
+        timestamp: log.createdAt,
+        campaignId: log.campaignId,
+        metadata: {
+          url: log.url,
+          country: log.country,
+          device: log.deviceType
+        }
+      }))
+    };
+
+    res.json(exportBundle);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
 exports.getAllSubscribers = async (req, res) => {
   try {
     const subscribers = await Subscriber.findAll({

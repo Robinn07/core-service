@@ -7,6 +7,7 @@ router.use(authenticate);
 
 router.post('/', automationController.createAutomation);
 router.get('/', automationController.getAllAutomations);
+router.put('/:id/canvas', automationController.updateCanvas);
 router.post('/trigger', automationController.triggerAutomation);
 
 module.exports = router;

@@ -1,8 +1,9 @@
 const { Worker } = require('bullmq');
 const connection = require('../config/redis');
 const sesClient = require('../config/ses');
-const { SendEmailCommand } = require("@aws-sdk/client-ses");
+const { SendRawEmailCommand } = require("@aws-sdk/client-ses");
 const { CampaignLog, Campaign } = require('../models');
+const nodemailer = require('nodemailer');
 
 /**
  * Delivery Worker
@@ -11,18 +12,37 @@ const { CampaignLog, Campaign } = require('../models');
  * Default: 14 emails/second (standard AWS SES Sandbox limit).
  */
 const worker = new Worker('delivery-queue', async job => {
-  const { htmlBody, subject, recipient, logId, campaignId } = job.data;
-
-  const command = new SendEmailCommand({
-    Destination: { ToAddresses: [recipient] },
-    Message: {
-      Body: { Html: { Data: htmlBody, Charset: "UTF-8" } },
-      Subject: { Data: subject, Charset: "UTF-8" },
-    },
-    Source: process.env.SES_FROM_EMAIL,
-  });
+  const { htmlBody, ampHtmlBody, subject, recipient, logId, campaignId } = job.data;
+  const baseUrl = process.env.APP_BASE_URL || 'http://localhost:4000';
 
   try {
+    // 1. Create a transporter for MIME generation (doesn't send)
+    const transporter = nodemailer.createTransport({
+      streamTransport: true,
+      newline: 'unix',
+      buffer: true
+    });
+
+    // 2. Build the message with 2024 compliance headers
+    const mailOptions = {
+      from: process.env.SES_FROM_EMAIL,
+      to: recipient,
+      subject: subject,
+      html: htmlBody,
+      headers: {
+        'List-Unsubscribe': `<mailto:unsub@${process.env.SES_FROM_EMAIL.split('@')[1]}>, <${baseUrl}/api/public/unsubscribe/one-click?logId=${logId}>`,
+        'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click'
+      }
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+    const rawMessage = info.message;
+
+    // 3. Send via AWS SES Raw Command
+    const command = new SendRawEmailCommand({
+      RawMessage: { Data: rawMessage }
+    });
+
     const response = await sesClient.send(command);
     
     // Update log

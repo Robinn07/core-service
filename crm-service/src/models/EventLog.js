@@ -8,7 +8,7 @@ const EventLog = sequelize.define('EventLog', {
     primaryKey: true
   },
   type: {
-    type: DataTypes.ENUM('OPEN', 'CLICK', 'BOUNCE', 'COMPLAINT', 'DELIVERY'),
+    type: DataTypes.ENUM('OPEN', 'CLICK', 'BOUNCE', 'COMPLAINT', 'DELIVERY', 'UNSUBSCRIBE'),
     allowNull: false
   },
   orgId: {
@@ -40,6 +40,26 @@ const EventLog = sequelize.define('EventLog', {
     allowNull: true
   },
   ab_variant: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  country: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  city: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  os: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  browser: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  deviceType: {
     type: DataTypes.STRING,
     allowNull: true
   }

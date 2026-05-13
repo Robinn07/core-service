@@ -1,10 +1,12 @@
-const { Form, Subscriber, List } = require('../models');
+const { Form, Subscriber, List, ConsentLog } = require('../models');
 const doiService = require('../services/doiService');
 const webhookService = require('../services/webhookService');
 
 exports.submitForm = async (req, res) => {
   const { formId } = req.params;
   const formData = req.body;
+  const ipAddress = req.ip || req.headers['x-forwarded-for'];
+  const userAgent = req.headers['user-agent'];
 
   try {
     const form = await Form.findByPk(formId);
@@ -36,7 +38,17 @@ exports.submitForm = async (req, res) => {
         });
     }
 
-    // 2. Add to the linked List
+    // 2. Log Consent Audit Trail
+    await ConsentLog.create({
+      subscriberId: subscriber.id,
+      orgId: form.orgId,
+      source: `Form: ${form.name} (ID: ${form.id})`,
+      ipAddress,
+      userAgent,
+      consentType: 'SUBSCRIBE'
+    });
+
+    // 3. Add to the linked List
     const list = await List.findByPk(form.listId);
     if (list) {
       await subscriber.addList(list);
@@ -60,5 +72,24 @@ exports.submitForm = async (req, res) => {
   } catch (error) {
     console.error('Form Submission Error:', error);
     res.status(500).json({ error: 'Failed to process form submission' });
+  }
+};
+
+exports.renderLandingPage = async (req, res) => {
+  const { slug } = req.params;
+
+  try {
+    const form = await Form.findOne({ 
+        where: { slug, isLandingPage: true, isActive: true } 
+    });
+
+    if (!form || !form.htmlContent) {
+      return res.status(404).send('Landing page not found');
+    }
+
+    res.send(form.htmlContent);
+  } catch (error) {
+    console.error('Render Landing Page Error:', error);
+    res.status(500).send('Failed to load landing page');
   }
 };

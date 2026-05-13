@@ -55,17 +55,22 @@ async function handleCampaign(campaignId) {
   const baseUrl = process.env.APP_BASE_URL || 'http://localhost:4000';
 
   const processTemplate = (template, variantSubject = null) => {
-    let html = template.htmlContent.replace(/<a\s+(?:[^>]*?\s+)?href="([^"]*)"/gi, (match, url) => {
-      if (url.startsWith('http')) {
-        const trackingUrl = `${baseUrl}/api/track/click/[[LOG_ID]]?url=${encodeURIComponent(url)}`;
-        return match.replace(url, trackingUrl);
-      }
-      return match;
-    });
-    html += `<img src="${baseUrl}/api/track/open/[[LOG_ID]]" width="1" height="1" style="display:none;" />`;
-    
+    const wrapHtml = (content) => {
+        if (!content) return null;
+        let html = content.replace(/<a\s+(?:[^>]*?\s+)?href="([^"]*)"/gi, (match, url) => {
+          if (url.startsWith('http')) {
+            const trackingUrl = `${baseUrl}/api/track/click/[[LOG_ID]]?url=${encodeURIComponent(url)}`;
+            return match.replace(url, trackingUrl);
+          }
+          return match;
+        });
+        html += `<img src="${baseUrl}/api/track/open/[[LOG_ID]]" width="1" height="1" style="display:none;" />`;
+        return html;
+    };
+
     return {
-      templateDelegate: Handlebars.compile(html),
+      templateDelegate: Handlebars.compile(wrapHtml(template.htmlContent)),
+      ampTemplateDelegate: template.ampHtmlContent ? Handlebars.compile(wrapHtml(template.ampHtmlContent)) : null,
       subjectDelegate: Handlebars.compile(variantSubject || template.subject)
     };
   };
@@ -152,7 +157,7 @@ async function handleCampaign(campaignId) {
         }
       }
 
-      return enqueuePersonalizedEmail(sub, delegates.templateDelegate, delegates.subjectDelegate, { campaignId: campaign.id, orgId }, variantName);
+      return enqueuePersonalizedEmail(sub, delegates.templateDelegate, delegates.subjectDelegate, { campaignId: campaign.id, orgId }, variantName, delegates.ampTemplateDelegate);
     });
 
     await Promise.all(enqueuePromises);
@@ -261,22 +266,27 @@ async function handleAutomationEmail(templateId, subscriberId, orgId) {
   if (isSuppressed) return;
 
   const baseUrl = process.env.APP_BASE_URL || 'http://localhost:4000';
-  let processedHtml = templateModel.htmlContent.replace(/<a\s+(?:[^>]*?\s+)?href="([^"]*)"/gi, (match, url) => {
-    if (url.startsWith('http')) {
-      const trackingUrl = `${baseUrl}/api/track/click/[[LOG_ID]]?url=${encodeURIComponent(url)}`;
-      return match.replace(url, trackingUrl);
-    }
-    return match;
-  });
-  processedHtml += `<img src="${baseUrl}/api/track/open/[[LOG_ID]]" width="1" height="1" style="display:none;" />`;
+  const wrapHtml = (content) => {
+    if (!content) return null;
+    let processed = content.replace(/<a\s+(?:[^>]*?\s+)?href="([^"]*)"/gi, (match, url) => {
+      if (url.startsWith('http')) {
+        const trackingUrl = `${baseUrl}/api/track/click/[[LOG_ID]]?url=${encodeURIComponent(url)}`;
+        return match.replace(url, trackingUrl);
+      }
+      return match;
+    });
+    processed += `<img src="${baseUrl}/api/track/open/[[LOG_ID]]" width="1" height="1" style="display:none;" />`;
+    return processed;
+  };
 
-  const templateDelegate = Handlebars.compile(processedHtml);
+  const templateDelegate = Handlebars.compile(wrapHtml(templateModel.htmlContent));
+  const ampTemplateDelegate = templateModel.ampHtmlContent ? Handlebars.compile(wrapHtml(templateModel.ampHtmlContent)) : null;
   const subjectDelegate = Handlebars.compile(templateModel.subject);
 
-  await enqueuePersonalizedEmail(subscriber, templateDelegate, subjectDelegate, { orgId });
+  await enqueuePersonalizedEmail(subscriber, templateDelegate, subjectDelegate, { orgId }, null, ampTemplateDelegate);
 }
 
-async function enqueuePersonalizedEmail(subscriber, templateDelegate, subjectDelegate, context, variant = null) {
+async function enqueuePersonalizedEmail(subscriber, templateDelegate, subjectDelegate, context, variant = null, ampTemplateDelegate = null) {
   // Create log first to get ID for placeholder replacement
   const log = await CampaignLog.create({
     ...context,
@@ -293,6 +303,13 @@ async function enqueuePersonalizedEmail(subscriber, templateDelegate, subjectDel
     ...subscriber.attributes
   }).replace(/\[\[LOG_ID\]\]/g, log.id);
 
+  const ampHtmlBody = ampTemplateDelegate ? ampTemplateDelegate({
+    firstName: subscriber.firstName,
+    lastName: subscriber.lastName,
+    email: subscriber.email,
+    ...subscriber.attributes
+  }).replace(/\[\[LOG_ID\]\]/g, log.id) : null;
+
   const subject = subjectDelegate({
     firstName: subscriber.firstName,
     lastName: subscriber.lastName,
@@ -301,6 +318,7 @@ async function enqueuePersonalizedEmail(subscriber, templateDelegate, subjectDel
 
   await deliveryQueue.add('deliver-email', {
     htmlBody,
+    ampHtmlBody,
     subject,
     recipient: subscriber.email,
     logId: log.id,

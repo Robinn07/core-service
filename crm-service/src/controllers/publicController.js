@@ -25,6 +25,17 @@ exports.confirmSubscription = async (req, res) => {
       confirmationToken: null // Clear token after use
     });
 
+    // Log Confirmation Consent
+    const { ConsentLog } = require('../models');
+    await ConsentLog.create({
+      subscriberId: subscriber.id,
+      orgId: subscriber.orgId,
+      source: 'Double Opt-In Confirmation',
+      ipAddress: req.ip || req.headers['x-forwarded-for'],
+      userAgent: req.headers['user-agent'],
+      consentType: 'CONFIRM'
+    });
+
     // Trigger webhook for new confirmed subscriber
     webhookService.dispatch(subscriber.orgId, 'subscriber.confirmed', {
       subscriberId: subscriber.id,
@@ -41,5 +52,50 @@ exports.confirmSubscription = async (req, res) => {
   } catch (error) {
     console.error('Confirmation Error:', error);
     res.status(500).send('<h1>Error</h1><p>An internal error occurred. Please try again later.</p>');
+  }
+};
+
+exports.oneClickUnsubscribe = async (req, res) => {
+  const { logId } = req.query;
+  const { CampaignLog, Subscriber } = require('../models');
+
+  try {
+    const log = await CampaignLog.findByPk(logId);
+    if (!log) return res.status(404).send('Invalid unsubscribe link');
+
+    const subscriber = await Subscriber.findByPk(log.subscriberId);
+    if (!subscriber) return res.status(404).send('Subscriber not found');
+
+    if (subscriber.status !== 'unsubscribed') {
+      await subscriber.update({ status: 'unsubscribed' });
+
+      // Log the event
+      const { EventLog } = require('../models');
+      await EventLog.create({
+        type: 'UNSUBSCRIBE',
+        orgId: subscriber.orgId,
+        campaignId: log.campaignId,
+        subscriberId: subscriber.id,
+        messageId: log.messageId,
+        userAgent: req.headers['user-agent'],
+        ipAddress: req.ip || req.headers['x-forwarded-for']
+      });
+
+      webhookService.dispatch(subscriber.orgId, 'subscriber.unsubscribed', {
+        subscriberId: subscriber.id,
+        email: subscriber.email,
+        campaignId: log.campaignId
+      });
+    }
+
+    // Gmail/Yahoo 2024 requires a 200 OK for the POST request
+    if (req.method === 'POST') {
+      return res.status(200).json({ status: 'unsubscribed' });
+    }
+
+    res.send('<h1>Unsubscribed Successfully</h1><p>You have been removed from our list. We are sorry to see you go.</p>');
+  } catch (error) {
+    console.error('Unsubscribe Error:', error);
+    res.status(500).send('Error processing unsubscribe request');
   }
 };
