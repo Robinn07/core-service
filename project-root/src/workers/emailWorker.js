@@ -8,52 +8,84 @@ const { v4: uuidv4 } = require('uuid');
 // Initialize SES 
 const ses = new SESClient({ region: process.env.AWS_REGION });
 
-const worker = new Worker('email-queue', async (job) => {
-  // ✅ Added tenantId to the destructured data
-  const { campaignId, tenantId, to, subject, body, from } = job.data;
+const worker = new Worker('delivery-queue', async (job) => {
+  // ✅ Harmonized payload to support both CRM and legacy structures
+  const { 
+    campaignId, 
+    tenantId, 
+    orgId,
+    to, 
+    recipient,
+    subject, 
+    body, 
+    htmlBody,
+    from,
+    fromEmail,
+    logId 
+  } = job.data;
+
+  const targetTenantId = tenantId || orgId || 'UNKNOWN';
+  const targetRecipient = to || recipient;
+  const targetBody = body || htmlBody;
+  const targetFrom = from || fromEmail || process.env.SES_FROM_EMAIL;
 
   const command = new SendEmailCommand({
-    Destination: { ToAddresses: [to] },
+    Destination: { ToAddresses: [targetRecipient] },
     Message: {
-      Body: { Html: { Data: body } },
+      Body: { Html: { Data: targetBody } },
       Subject: { Data: subject },
     },
-    Source: from || process.env.SES_FROM_EMAIL,
+    Source: targetFrom,
+    // ✅ Added SES Tags for feedback loop tracking
+    Tags: [
+      { Name: 'orgId', Value: String(targetTenantId) },
+      { Name: 'campaignId', Value: String(campaignId || 'none') },
+      { Name: 'logId', Value: String(logId || job.id) }
+    ]
   });
 
   try {
     // 1. Send the Email via AWS SES
-    await ses.send(command);
+    const response = await ses.send(command);
     
-    // 2. SUCCESS: Update Campaign status & Usage
+    // 2. SUCCESS: Update Campaign status & Usage (if campaignId exists in Firebase)
     const batch = db.batch();
     
-    batch.update(db.collection('campaigns').doc(campaignId), {
-      status: 'sent',
-      sentAt: admin.firestore.FieldValue.serverTimestamp()
-    });
-
-    if (tenantId) {
-      batch.update(db.collection('tenants').doc(tenantId), {
-        currentUsage: admin.firestore.FieldValue.increment(1),
-        pendingUsage: admin.firestore.FieldValue.increment(-1)
+    // Check if campaignId is a Firebase ID (usually longer/different than SQL IDs)
+    // For CRM-integrated sends, we might skip Firebase campaign updates if they aren't synced
+    if (campaignId && String(campaignId).length > 10) {
+      batch.update(db.collection('campaigns').doc(String(campaignId)), {
+        status: 'sent',
+        sentAt: admin.firestore.FieldValue.serverTimestamp()
       });
+    }
+
+    if (targetTenantId && targetTenantId !== 'UNKNOWN') {
+      const tenantRef = db.collection('tenants').doc(String(targetTenantId));
+      const tenantDoc = await tenantRef.get();
+      if (tenantDoc.exists) {
+        batch.update(tenantRef, {
+          currentUsage: admin.firestore.FieldValue.increment(1),
+          pendingUsage: admin.firestore.FieldValue.increment(-1)
+        });
+      }
     }
     
     await batch.commit();
-    console.log(`✅ Email sent and usage updated for tenant: ${tenantId}`);
+    console.log(`✅ Email sent and usage updated for tenant: ${targetTenantId}`);
 
     // 3. PIPELINE: Publish Event to RabbitMQ for Analytics
     await publishEvent({
       event_id: uuidv4(),
-      orgId: tenantId || 'UNKNOWN',
-      userId: to,
-      event_type: 'Campaign_Sent',
+      orgId: targetTenantId,
+      userId: targetRecipient,
+      event_type: 'email_sent', // ✅ Standardized to lowercase
       channel: 'EMAIL',
-      campaignId: campaignId,
+      campaignId: campaignId || 'manual',
       timestamp: new Date().toISOString(),
       metadata: {
         subject,
+        messageId: response.MessageId,
         jobId: job.id
       }
     });

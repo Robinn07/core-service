@@ -1,17 +1,17 @@
 import { useQuery } from '@tanstack/react-query';
 import axios from 'axios';
 
-const ANALYTICS_API_BASE = 'http://localhost:8080/analytics';
+const ANALYTICS_API_BASE = '/api/v1/analytics';
 
 const fetchJourney = async (orgId, token) => {
-  const { data } = await axios.get(`${ANALYTICS_API_BASE}/${orgId}/journey`, {
+  const { data } = await axios.get(`${ANALYTICS_API_BASE}/journey`, {
     headers: { Authorization: `Bearer ${token}` }
   });
   return data;
 };
 
 const fetchAtRisk = async (orgId, token) => {
-  const { data } = await axios.get(`${ANALYTICS_API_BASE}/${orgId}/at-risk`, {
+  const { data } = await axios.get(`${ANALYTICS_API_BASE}/at-risk`, {
     headers: { Authorization: `Bearer ${token}` }
   });
   return data;
