@@ -42,11 +42,9 @@ exports.confirmSubscription = async (req, res) => {
       email: subscriber.email
     });
 
-    // Trigger Automations
-    const automationService = require('../services/automationService');
-    automationService.trigger(subscriber.orgId, 'subscriber_created', {
-        subscriberId: subscriber.id
-    });
+    // Trigger Automations via Emitter
+    const appEmitter = require('../utils/events');
+    appEmitter.emit('subscriber_created', subscriber);
 
     res.send('<h1>Subscription Confirmed!</h1><p>Thank you for confirming your email. You are now subscribed.</p>');
   } catch (error) {
@@ -86,6 +84,10 @@ exports.oneClickUnsubscribe = async (req, res) => {
         email: subscriber.email,
         campaignId: log.campaignId
       });
+
+      // Trigger Automation via Emitter
+      const appEmitter = require('../utils/events');
+      appEmitter.emit('unsubscribed', subscriber);
     }
 
     // Gmail/Yahoo 2024 requires a 200 OK for the POST request

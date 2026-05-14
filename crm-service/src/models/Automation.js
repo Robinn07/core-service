@@ -16,7 +16,16 @@ const Automation = sequelize.define('Automation', {
     allowNull: false
   },
   triggerType: {
-    type: DataTypes.ENUM('subscriber_created', 'list_joined', 'tag_added', 'event_occurred'),
+    type: DataTypes.ENUM(
+      'subscriber_created', 
+      'list_joined', 
+      'tag_added', 
+      'event_occurred',
+      'segment_entered',
+      'unsubscribed',
+      'date_based',
+      'field_changed'
+    ),
     allowNull: false
   },
   triggerConfig: {

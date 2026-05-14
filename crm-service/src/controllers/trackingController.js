@@ -65,11 +65,16 @@ exports.trackOpen = async (req, res) => {
       forwardEvent('email_opened', eventData);
       if (eventData.orgId !== 'unknown') {
         webhookService.dispatch(eventData.orgId, 'email.opened', eventData);
-        // Trigger Automation
-        automationService.trigger(eventData.orgId, 'event_occurred', { 
-          subscriberId: eventData.subscriberId, 
-          eventType: 'email.opened' 
-        });
+        // Unified Automation Trigger via Emitter
+        const { Subscriber } = require('../models');
+        const subscriber = await Subscriber.findByPk(eventData.subscriberId);
+        if (subscriber) {
+          appEmitter.emit('event_occurred', { 
+            subscriber, 
+            eventType: 'OPEN', 
+            metadata: { campaignId: eventData.campaignId } 
+          });
+        }
       }
 
       if (log.campaignId) {
@@ -135,11 +140,16 @@ exports.trackClick = async (req, res) => {
       forwardEvent('link_clicked', eventData);
       if (eventData.orgId !== 'unknown') {
         webhookService.dispatch(eventData.orgId, 'email.clicked', eventData);
-        // Trigger Automation
-        automationService.trigger(eventData.orgId, 'event_occurred', { 
-          subscriberId: eventData.subscriberId, 
-          eventType: 'email.clicked' 
-        });
+        // Unified Automation Trigger via Emitter
+        const { Subscriber } = require('../models');
+        const subscriber = await Subscriber.findByPk(eventData.subscriberId);
+        if (subscriber) {
+          appEmitter.emit('event_occurred', { 
+            subscriber, 
+            eventType: 'CLICK', 
+            metadata: { campaignId: eventData.campaignId, url: eventData.url } 
+          });
+        }
       }
 
       if (log.campaignId) {

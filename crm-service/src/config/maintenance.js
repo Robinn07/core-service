@@ -1,7 +1,7 @@
 const cron = require('node-cron');
 const fs = require('fs');
 const path = require('path');
-const logger = require('./utils/logger');
+const logger = require('../utils/logger');
 const aiQueue = require('../queue/aiQueue');
 const { Subscriber } = require('../models');
 const { sequelize } = require('./db');
@@ -117,6 +117,53 @@ const initMaintenanceJobs = () => {
       logger.info(`Queued clustering for ${organizations.length} organizations.`);
     } catch (err) {
       logger.error('Failed to queue weekly audience clustering:', err);
+    }
+  });
+
+  // 6. Daily Date-Based Automation Check (9 AM)
+  cron.schedule('0 9 * * *', async () => {
+    logger.info('Running daily date-based automation check...');
+    try {
+      const { Automation, Subscriber } = require('../models');
+      const { Op } = require('sequelize');
+      const automationService = require('../services/automationService');
+
+      const dateAutomations = await Automation.findAll({
+        where: { triggerType: 'date_based', active: true }
+      });
+
+      for (const auto of dateAutomations) {
+        const { field, offsetDays } = auto.triggerConfig;
+        if (!field) continue;
+
+        const targetDate = new Date();
+        if (offsetDays) targetDate.setDate(targetDate.getDate() - offsetDays);
+
+        const month = targetDate.getMonth() + 1;
+        const day = targetDate.getDate();
+
+        // This is a simplified check for month/day matching (ignoring year for birthdays/anniversaries)
+        // For more complex field types, we'd need more logic.
+        const subscribers = await Subscriber.findAll({
+          where: {
+            orgId: auto.orgId,
+            [Op.and]: [
+              sequelize.where(sequelize.fn('EXTRACT', sequelize.literal(`MONTH FROM "${field}"`)), month),
+              sequelize.where(sequelize.fn('EXTRACT', sequelize.literal(`DAY FROM "${field}"`)), day)
+            ]
+          }
+        });
+
+        for (const sub of subscribers) {
+          await automationService.trigger(auto.orgId, 'date_based', {
+            subscriberId: sub.id,
+            field
+          });
+        }
+      }
+      logger.info(`Processed ${dateAutomations.length} date-based automations.`);
+    } catch (err) {
+      logger.error('Failed to run date-based automation check:', err);
     }
   });
 

@@ -69,6 +69,32 @@ class AutomationService {
       const { Tag } = require('../models');
       const tag = await Tag.findOne({ where: { name: action.config.tagName, orgId: subscriber.orgId } });
       if (tag) await subscriber.removeTag(tag);
+    } else if (action.type === 'update_property') {
+      const { field, value } = action.config;
+      if (['firstName', 'lastName', 'email'].includes(field)) {
+        subscriber[field] = value;
+      } else {
+        subscriber.attributes = { ...subscriber.attributes, [field]: value };
+      }
+      await subscriber.save();
+    } else if (action.type === 'copy_to_list') {
+      const { listId } = action.config;
+      await subscriber.addList(listId);
+    } else if (action.type === 'move_to_list') {
+      const { fromListId, toListId } = action.config;
+      if (fromListId) await subscriber.removeList(fromListId);
+      await subscriber.addList(toListId);
+    } else if (action.type === 'unsubscribe') {
+      subscriber.status = 'unsubscribed';
+      await subscriber.save();
+    } else if (action.type === 'send_webhook') {
+      const { url, payload } = action.config;
+      const axios = require('axios');
+      try {
+        await axios.post(url, { ...payload, subscriberId: subscriber.id, email: subscriber.email }, { timeout: 5000 });
+      } catch (err) {
+        console.error(`Automation Webhook Failed: ${err.message}`);
+      }
     } else if (action.type === 'split') {
       conditionMet = await this._evaluateCondition(action.config, subscriber);
     }
@@ -89,7 +115,15 @@ class AutomationService {
             waitDelay = Math.max(0, Math.floor((targetDate.getTime() - now.getTime()) / 1000));
           } else {
             // Default to relative wait (seconds)
-            waitDelay = nextAction.config.seconds || 0;
+            const waitAmount = nextAction.config.waitAmount || 0;
+            const waitUnit = nextAction.config.waitUnit || 'seconds';
+            const unitMultipliers = {
+              seconds: 1,
+              minutes: 60,
+              hours: 3600,
+              days: 86400
+            };
+            waitDelay = waitAmount * (unitMultipliers[waitUnit] || 1);
           }
           // The 'wait' action itself doesn't "do" anything but delay the next one
           actualNextId = nextAction.nextActionId;
@@ -103,12 +137,16 @@ class AutomationService {
   }
 
   async _evaluateCondition(config, subscriber) {
-    const { type, operator, field, value, tagName, campaignId } = config;
+    const { type, operator, field, value, tagName, campaignId, listId } = config;
 
     switch (type) {
       case 'has_tag':
         const tags = await subscriber.getTags();
         return tags.some(t => t.name === tagName);
+
+      case 'is_in_list':
+        const lists = await subscriber.getLists();
+        return lists.some(l => l.id === listId);
 
       case 'opened_email':
         return (await EventLog.count({

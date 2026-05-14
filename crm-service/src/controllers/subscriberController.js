@@ -44,8 +44,16 @@ const appEmitter = require('../utils/events');
        consentType: 'SUBSCRIBE'
      });
 
-     if (listIds && listIds.length > 0) await subscriber.addLists(listIds);
-     if (tagIds && tagIds.length > 0) await subscriber.addTags(tagIds);
+     if (listIds && listIds.length > 0) {
+       await subscriber.addLists(listIds);
+       listIds.forEach(id => appEmitter.emit('list_joined', { subscriber, listId: id }));
+     }
+     if (tagIds && tagIds.length > 0) {
+       await subscriber.addTags(tagIds);
+       // We'd need to fetch tag names or just emit IDs. Let's assume we want to trigger by name for tags.
+       const tags = await subscriber.getTags();
+       tags.forEach(tag => appEmitter.emit('tag_added', { subscriber, tagName: tag.name }));
+     }
 
      // Trigger Double Opt-In Email
      await doiService.sendConfirmationEmail(subscriber);
@@ -151,9 +159,51 @@ exports.updateSubscriber = async (req, res) => {
     const subscriber = await Subscriber.findOne({ where: { id: req.params.id, orgId: req.user.orgId } });
     if (!subscriber) return res.status(404).json({ error: 'Not found' });
     
+    const oldStatus = subscriber.status;
+    const oldFirstName = subscriber.firstName;
+    const oldLastName = subscriber.lastName;
+    const oldAttributes = { ...subscriber.attributes };
+
     await subscriber.update({ firstName, lastName, attributes, status });
-    if (listIds) await subscriber.setLists(listIds);
-    if (tagIds) await subscriber.setTags(tagIds);
+
+    // Triggers
+    if (status !== oldStatus && status === 'unsubscribed') {
+      appEmitter.emit('unsubscribed', subscriber);
+    }
+    if (firstName !== oldFirstName) appEmitter.emit('field_changed', { subscriber, field: 'firstName', oldValue: oldFirstName, newValue: firstName });
+    if (lastName !== oldLastName) appEmitter.emit('field_changed', { subscriber, field: 'lastName', oldValue: oldLastName, newValue: lastName });
+    
+    // Check for attribute changes
+    if (attributes) {
+      Object.keys(attributes).forEach(key => {
+        if (attributes[key] !== oldAttributes[key]) {
+          appEmitter.emit('field_changed', { subscriber, field: key, oldValue: oldAttributes[key], newValue: attributes[key] });
+        }
+      });
+    }
+
+    if (listIds) {
+      const currentLists = await subscriber.getLists();
+      const currentListIds = currentLists.map(l => l.id);
+      const newlyAddedListIds = listIds.filter(id => !currentListIds.includes(id));
+      
+      await subscriber.setLists(listIds);
+      
+      newlyAddedListIds.forEach(id => appEmitter.emit('list_joined', { subscriber, listId: id }));
+    }
+
+    if (tagIds) {
+      const currentTags = await subscriber.getTags();
+      const currentTagIds = currentTags.map(t => t.id);
+      const newlyAddedTagIds = tagIds.filter(id => !currentTagIds.includes(id));
+
+      await subscriber.setTags(tagIds);
+
+      const allTags = await subscriber.getTags();
+      const newlyAddedTags = allTags.filter(t => newlyAddedTagIds.includes(t.id));
+      newlyAddedTags.forEach(tag => appEmitter.emit('tag_added', { subscriber, tagName: tag.name }));
+    }
+
     res.json(subscriber);
   } catch (error) { res.status(500).json({ error: error.message }); }
 };

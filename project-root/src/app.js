@@ -5,12 +5,16 @@ const rateLimit = require('express-rate-limit');
 const campaignRoutes = require('./routes/campaigns');
 const tenantRoutes = require('./routes/tenantRoutes');
 const analyticsRoutes = require('./routes/analytics');
+const sesWebhookController = require('./controllers/sesWebhookController');
 
 const app = express();
 
 // 1. Global Middleware
 app.use(cors());
 app.use(express.json());
+
+// SES Webhook (Specific parsing for SNS)
+app.post('/api/ses/webhook', express.json({ type: '*/*' }), sesWebhookController.handleWebhook);
 
 // 2. Rate Limiting
 const apiLimiter = rateLimit({

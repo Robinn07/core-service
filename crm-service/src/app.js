@@ -12,6 +12,7 @@ const swaggerUi = require('swagger-ui-express');
 const swaggerSpec = require('./config/swagger');
 require('./workers/emailWorker');
 require('./workers/automationWorker');
+require('./services/automationTriggerService');
 require('./models');
 
 const app = express();

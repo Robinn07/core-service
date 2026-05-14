@@ -4,6 +4,7 @@ const { db, admin } = require('../config/firebase');
 const connection = require('../config/redis');
 const { publishEvent } = require('../config/rabbitmq');
 const { v4: uuidv4 } = require('uuid');
+const { isSuppressed } = require('../services/suppressionService');
 
 // Initialize SES 
 const ses = new SESClient({ region: process.env.AWS_REGION });
@@ -28,6 +29,12 @@ const worker = new Worker('delivery-queue', async (job) => {
   const targetRecipient = to || recipient;
   const targetBody = body || htmlBody;
   const targetFrom = from || fromEmail || process.env.SES_FROM_EMAIL;
+
+  // ✅ Suppression List Check
+  if (await isSuppressed(targetRecipient)) {
+    console.warn(`⚠️ Skipping suppressed email: ${targetRecipient}`);
+    return { skipped: true, reason: 'SUPPRESSED' };
+  }
 
   const command = new SendEmailCommand({
     Destination: { ToAddresses: [targetRecipient] },

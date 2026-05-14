@@ -8,7 +8,18 @@ const AutomationAction = sequelize.define('AutomationAction', {
     primaryKey: true
   },
   type: {
-    type: DataTypes.ENUM('send_email', 'add_tag', 'remove_tag', 'wait', 'split'),
+    type: DataTypes.ENUM(
+      'send_email', 
+      'add_tag', 
+      'remove_tag', 
+      'wait', 
+      'split',
+      'update_property',
+      'copy_to_list',
+      'move_to_list',
+      'unsubscribe',
+      'send_webhook'
+    ),
     defaultValue: 'send_email'
   },
   nextActionId: {
