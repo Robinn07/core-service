@@ -14,6 +14,8 @@ const Form = require('./Form');
 const SuppressionList = require('./SuppressionList');
 const OrgConfig = require('./OrgConfig');
 const ConsentLog = require('./ConsentLog');
+const UserRole = require('./UserRole');
+const CampaignAnalytics = require('./CampaignAnalytics');
 
 // Subscriber <-> List (Many-to-Many)
 Subscriber.belongsToMany(List, { through: 'list_subscribers' });
@@ -70,5 +72,7 @@ module.exports = {
   Form,
   SuppressionList,
   OrgConfig,
-  ConsentLog
+  ConsentLog,
+  UserRole,
+  CampaignAnalytics
 };

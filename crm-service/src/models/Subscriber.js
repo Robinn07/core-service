@@ -43,6 +43,15 @@ const Subscriber = sequelize.define('Subscriber', {
     type: DataTypes.JSONB,
     defaultValue: {}
   },
+  preferences: {
+    type: DataTypes.JSONB,
+    defaultValue: {
+      marketing: true,
+      transactional: true,
+      newsletters: true,
+      productUpdates: true
+    }
+  },
   totalOpens: {
     type: DataTypes.INTEGER,
     defaultValue: 0

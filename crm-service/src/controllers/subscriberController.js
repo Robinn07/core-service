@@ -278,3 +278,93 @@ exports.segmentSubscribers = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
+
+exports.mergeSubscribers = async (req, res) => {
+  const { sourceId, targetId } = req.body;
+  const orgId = req.user.orgId;
+  const { sequelize } = require('../models');
+
+  const transaction = await sequelize.transaction();
+
+  try {
+    const source = await Subscriber.findOne({ where: { id: sourceId, orgId }, transaction });
+    const target = await Subscriber.findOne({ where: { id: targetId, orgId }, transaction });
+
+    if (!source || !target) {
+      return res.status(404).json({ error: 'Source or Target subscriber not found' });
+    }
+
+    // 1. Move Memberships (Tags, Lists)
+    const sourceTags = await source.getTags({ transaction });
+    const sourceLists = await source.getLists({ transaction });
+
+    await target.addTags(sourceTags, { transaction });
+    await target.addLists(sourceLists, { transaction });
+
+    // 2. Merge Attributes (Target wins in conflicts)
+    const mergedAttributes = { ...source.attributes, ...target.attributes };
+    
+    // 3. Update Target stats (Aggregate)
+    const totalOpens = (source.totalOpens || 0) + (target.totalOpens || 0);
+    const totalClicks = (source.totalClicks || 0) + (target.totalClicks || 0);
+
+    await target.update({
+      attributes: mergedAttributes,
+      totalOpens,
+      totalClicks,
+      lastActivity: source.lastActivity > target.lastActivity ? source.lastActivity : target.lastActivity
+    }, { transaction });
+
+    // 4. Redirect Event Logs and Campaign Logs
+    await EventLog.update({ subscriberId: targetId }, { where: { subscriberId: sourceId, orgId }, transaction });
+    await CampaignLog.update({ subscriberId: targetId }, { where: { subscriberId: sourceId, orgId }, transaction });
+
+    // 5. Delete Source
+    await source.destroy({ transaction });
+
+    await transaction.commit();
+    res.json({ message: 'Subscribers merged successfully', targetId });
+  } catch (error) {
+    await transaction.rollback();
+    res.status(500).json({ error: error.message });
+  }
+};
+
+exports.convertSegmentToStatic = async (req, res) => {
+  const { segmentCriteria, listName } = req.body;
+  const orgId = req.user.orgId;
+
+  try {
+    // 1. Fetch subscribers matching criteria (reuse segmentSubscribers logic internally)
+    // For simplicity, we'll use the existing segmentSubscribers logic via direct call or refactoring.
+    // Here we'll implement a condensed version.
+    const queryOptions = {
+      where: { orgId, ...segmentCriteria.where },
+      include: segmentCriteria.include || []
+    };
+
+    const subscribers = await Subscriber.findAll(queryOptions);
+
+    if (subscribers.length === 0) {
+      return res.status(400).json({ error: 'No subscribers found for this segment' });
+    }
+
+    // 2. Create new static list
+    const list = await List.create({
+      orgId,
+      name: listName || `Snapshot: ${new Date().toISOString()}`,
+      description: 'Static snapshot of a dynamic segment'
+    });
+
+    // 3. Add subscribers to list
+    await list.addSubscribers(subscribers);
+
+    res.status(201).json({
+      message: 'Static list created from segment',
+      listId: list.id,
+      count: subscribers.length
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};

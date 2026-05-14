@@ -109,8 +109,12 @@ app.use('/api/outgoing-webhooks', require('./routes/outgoingWebhookRoutes'));
 app.use('/api/track', require('./routes/trackingRoutes'));
 app.use('/api/ai', require('./routes/aiRoutes'));
 app.use('/api/domains', require('./routes/domainRoutes'));
+app.use('/api/analytics', require('./routes/analyticsRoutes'));
 app.use('/api/api-keys', require('./routes/apiKeyRoutes'));
 app.use('/api/forms', require('./routes/formRoutes'));
 app.use('/api/public', require('./routes/publicRoutes'));
+
+// SES Webhook - Needs to handle text/plain from AWS SNS
+app.use('/api/ses', express.text({ type: 'text/plain' }), require('./routes/sesRoutes'));
 
 module.exports = app;

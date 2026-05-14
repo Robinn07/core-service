@@ -34,6 +34,10 @@ const Template = sequelize.define('Template', {
   ampHtmlContent: {
     type: DataTypes.TEXT,
     allowNull: true
+  },
+  isPublic: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false
   }
 }, {
   timestamps: true,

@@ -11,10 +11,14 @@ module.exports = {
       max_memory_restart: '1G',
       env: {
         PORT: 5000,
-        NODE_ENV: 'development'
+        NODE_ENV: 'development',
+	SHARED_MARKETING_DOMAIN: 'system.getloopx.com',  
+	SHARED_TX_DOMAIN: 'news.getloopx.com'
       },
       env_production: {
-        NODE_ENV: 'production'
+        NODE_ENV: 'production',
+	SHARED_MARKETING_DOMAIN: 'system.getloopx.com',  
+	SHARED_TX_DOMAIN: 'news.getloopx.com'
       }
     },
 

@@ -1,11 +1,12 @@
 const admin = require('../config/firebase');
 const logger = require('../utils/logger');
 const apiKeyService = require('../services/apiKeyService');
+const { UserRole } = require('../models');
 
 const authenticate = async (req, res, next) => {
   // 1. Skip Auth for local dev
   if (process.env.SKIP_AUTH === 'true') {
-    req.user = { uid: 'dev-user', email: 'dev@example.com', orgId: 'crm-system' };
+    req.user = { uid: 'dev-user', email: 'dev@example.com', orgId: 'crm-system', role: 'ADMIN' };
     return next();
   }
 
@@ -34,7 +35,12 @@ const authenticate = async (req, res, next) => {
   try {
     const decodedToken = await admin.auth().verifyIdToken(token);
     const orgId = decodedToken.orgId || decodedToken.uid;
-    req.user = { uid: decodedToken.uid, email: decodedToken.email, orgId };
+    
+    // Fetch Role from DB
+    const userRole = await UserRole.findOne({ where: { uid: decodedToken.uid, orgId } });
+    const role = userRole ? userRole.role : 'ADMIN'; // Default to ADMIN for first user/owner
+
+    req.user = { uid: decodedToken.uid, email: decodedToken.email, orgId, role };
     next();
   } catch (error) {
     logger.error('Auth Error:', error.message);
@@ -60,4 +66,21 @@ const injectOrgId = (req) => {
   };
 };
 
-module.exports = { authenticate, injectOrgId };
+/**
+ * RBAC Authorization Middleware
+ * @param {string[]} allowedRoles 
+ */
+const authorize = (allowedRoles = []) => {
+  return (req, res, next) => {
+    if (process.env.SKIP_AUTH === 'true') return next();
+    
+    if (!req.user || !allowedRoles.includes(req.user.role)) {
+      return res.status(403).json({ 
+        error: `Forbidden: This action requires one of the following roles: ${allowedRoles.join(', ')}` 
+      });
+    }
+    next();
+  };
+};
+
+module.exports = { authenticate, injectOrgId, authorize };

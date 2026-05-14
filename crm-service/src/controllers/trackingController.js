@@ -4,6 +4,7 @@ const { emitToOrg } = require('../config/socket');
 const anomalyService = require('../services/anomalyService');
 const webhookService = require('../services/webhookService');
 const automationService = require('../services/automationService');
+const analyticsAggregator = require('../services/analyticsAggregator');
 const analyticsQueue = require('../queue/analyticsQueue');
 const geoip = require('geoip-lite');
 const UAParser = require('ua-parser-js');
@@ -50,6 +51,9 @@ exports.trackOpen = async (req, res) => {
       });
 
       emitToOrg(eventData.orgId, 'event:open', eventData);
+      
+      // Aggregated Analytics
+      analyticsAggregator.aggregate(eventData);
 
       if (log.subscriberId) {
         await Subscriber.increment('totalOpens', { where: { id: log.subscriberId } });
@@ -117,6 +121,9 @@ exports.trackClick = async (req, res) => {
       });
 
       emitToOrg(eventData.orgId, 'event:click', eventData);
+
+      // Aggregated Analytics
+      analyticsAggregator.aggregate(eventData);
 
       if (log.subscriberId) {
         await Subscriber.increment('totalClicks', { where: { id: log.subscriberId } });

@@ -12,7 +12,7 @@ const nodemailer = require('nodemailer');
  * Default: 14 emails/second (standard AWS SES Sandbox limit).
  */
 const worker = new Worker('delivery-queue', async job => {
-  const { htmlBody, ampHtmlBody, subject, recipient, logId, campaignId } = job.data;
+  const { htmlBody, ampHtmlBody, subject, recipient, logId, campaignId, fromEmail, configurationSet } = job.data;
   const baseUrl = process.env.APP_BASE_URL || 'http://localhost:4000';
 
   try {
@@ -23,14 +23,17 @@ const worker = new Worker('delivery-queue', async job => {
       buffer: true
     });
 
+    const senderEmail = fromEmail || process.env.SES_FROM_EMAIL;
+    const senderDomain = senderEmail.split('@')[1];
+
     // 2. Build the message with 2024 compliance headers
     const mailOptions = {
-      from: process.env.SES_FROM_EMAIL,
+      from: senderEmail,
       to: recipient,
       subject: subject,
       html: htmlBody,
       headers: {
-        'List-Unsubscribe': `<mailto:unsub@${process.env.SES_FROM_EMAIL.split('@')[1]}>, <${baseUrl}/api/public/unsubscribe/one-click?logId=${logId}>`,
+        'List-Unsubscribe': `<mailto:unsub@${senderDomain}>, <${baseUrl}/api/public/unsubscribe/one-click?logId=${logId}>`,
         'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click'
       }
     };
@@ -40,7 +43,13 @@ const worker = new Worker('delivery-queue', async job => {
 
     // 3. Send via AWS SES Raw Command
     const command = new SendRawEmailCommand({
-      RawMessage: { Data: rawMessage }
+      RawMessage: { Data: rawMessage },
+      ConfigurationSetName: configurationSet || undefined,
+      Tags: [
+        { Name: 'orgId', Value: String(job.data.orgId || 'unknown') },
+        { Name: 'campaignId', Value: String(campaignId || 'none') },
+        { Name: 'logId', Value: String(logId) }
+      ]
     });
 
     const response = await sesClient.send(command);

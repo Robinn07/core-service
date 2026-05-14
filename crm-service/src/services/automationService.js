@@ -65,6 +65,10 @@ class AutomationService {
       const { Tag } = require('../models');
       const [tag] = await Tag.findOrCreate({ where: { name: action.config.tagName, orgId: subscriber.orgId } });
       await subscriber.addTag(tag);
+    } else if (action.type === 'remove_tag') {
+      const { Tag } = require('../models');
+      const tag = await Tag.findOne({ where: { name: action.config.tagName, orgId: subscriber.orgId } });
+      if (tag) await subscriber.removeTag(tag);
     } else if (action.type === 'split') {
       conditionMet = await this._evaluateCondition(action.config, subscriber);
     }
@@ -75,33 +79,63 @@ class AutomationService {
     if (nextStepId) {
       const nextAction = await AutomationAction.findByPk(nextStepId);
       if (nextAction) {
-        // Handle 'wait' type as a specific delay for the NEXT action
-        const waitDelay = nextAction.type === 'wait' ? (nextAction.config.seconds || 0) : 0;
-        const actualNextId = nextAction.type === 'wait' ? nextAction.nextActionId : nextStepId;
-        
+        let waitDelay = 0;
+        let actualNextId = nextStepId;
+
+        if (nextAction.type === 'wait') {
+          if (nextAction.config.waitType === 'until_date') {
+            const targetDate = new Date(nextAction.config.untilDate);
+            const now = new Date();
+            waitDelay = Math.max(0, Math.floor((targetDate.getTime() - now.getTime()) / 1000));
+          } else {
+            // Default to relative wait (seconds)
+            waitDelay = nextAction.config.seconds || 0;
+          }
+          // The 'wait' action itself doesn't "do" anything but delay the next one
+          actualNextId = nextAction.nextActionId;
+        }
+
         if (actualNextId) {
-            await this.queueAction(actualNextId, subscriberId, waitDelay);
+          await this.queueAction(actualNextId, subscriberId, waitDelay);
         }
       }
     }
   }
 
   async _evaluateCondition(config, subscriber) {
-    if (config.type === 'has_tag') {
+    const { type, operator, field, value, tagName, campaignId } = config;
+
+    switch (type) {
+      case 'has_tag':
         const tags = await subscriber.getTags();
-        return tags.some(t => t.name === config.tagName);
+        return tags.some(t => t.name === tagName);
+
+      case 'opened_email':
+        return (await EventLog.count({
+          where: { subscriberId: subscriber.id, type: 'OPEN', campaignId }
+        })) > 0;
+
+      case 'clicked_link':
+        return (await EventLog.count({
+          where: { subscriberId: subscriber.id, type: 'CLICK', campaignId }
+        })) > 0;
+
+      case 'field_value':
+        const actualValue = subscriber[field] || (subscriber.attributes && subscriber.attributes[field]);
+        if (operator === 'equals') return String(actualValue) === String(value);
+        if (operator === 'contains') return String(actualValue).includes(String(value));
+        if (operator === 'greater_than') return Number(actualValue) > Number(value);
+        if (operator === 'less_than') return Number(actualValue) < Number(value);
+        return false;
+
+      case 'lead_score':
+        if (operator === 'greater_than') return subscriber.leadScore > Number(value);
+        if (operator === 'less_than') return subscriber.leadScore < Number(value);
+        return false;
+
+      default:
+        return false;
     }
-    if (config.type === 'opened_email') {
-        const count = await EventLog.count({
-            where: {
-                subscriberId: subscriber.id,
-                type: 'OPEN',
-                campaignId: config.campaignId
-            }
-        });
-        return count > 0;
-    }
-    return false;
   }
 }
 

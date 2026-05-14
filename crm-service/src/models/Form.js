@@ -45,6 +45,39 @@ const Form = sequelize.define('Form', {
   htmlContent: {
     type: DataTypes.TEXT,
     allowNull: true
+  },
+  designJson: {
+    type: DataTypes.JSONB,
+    defaultValue: {}
+  },
+  behavioralTriggers: {
+    type: DataTypes.JSONB,
+    defaultValue: {
+      exitIntent: false,
+      scrollDepth: null, // e.g., 50 for 50%
+      inactivityTimer: null // seconds
+    }
+  },
+  isPopUp: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false
+  },
+  popUpConfig: {
+    type: DataTypes.JSONB,
+    defaultValue: {
+      type: 'MODAL',
+      trigger: 'TIME',
+      triggerValue: 5,
+      frequency: 'ONCE_PER_SESSION'
+    }
+  },
+  impressionCount: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0
+  },
+  conversionCount: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0
   }
 }, {
   timestamps: true,

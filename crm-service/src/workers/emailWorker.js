@@ -6,6 +6,7 @@ const { Op, Sequelize } = require('sequelize');
 const dynamicSegmentService = require('../services/dynamicSegmentService');
 const deliveryQueue = require('../queue/deliveryQueue');
 const emailQueue = require('../queue/emailQueue');
+const mailRoutingService = require('../services/mailRoutingService');
 
 /**
  * Optimized Email Worker
@@ -80,6 +81,8 @@ async function handleCampaign(campaignId) {
 
   // REC 3: Optimized Join for Suppression
   const { segmentConfig, orgId } = campaign;
+  const { fromEmail, configurationSet } = await mailRoutingService.getSenderIdentity(orgId, 'MARKETING');
+
   const queryOptions = {
     where: { 
       status: 'active',
@@ -143,7 +146,14 @@ async function handleCampaign(campaignId) {
 
     if (subscribers.length === 0) break;
 
-    const enqueuePromises = subscribers.map((sub, index) => {
+    const filteredSubscribers = subscribers.filter(sub => {
+      // If the campaign has a specific category in segmentConfig, check that preference.
+      // Default to 'marketing' preference for regular campaigns.
+      const category = (campaign.segmentConfig && campaign.segmentConfig.category) || 'marketing';
+      return sub.preferences[category] !== false;
+    });
+
+    const enqueuePromises = filteredSubscribers.map((sub, index) => {
       let variantName = null;
       let delegates = variantA;
 
@@ -157,7 +167,7 @@ async function handleCampaign(campaignId) {
         }
       }
 
-      return enqueuePersonalizedEmail(sub, delegates.templateDelegate, delegates.subjectDelegate, { campaignId: campaign.id, orgId }, variantName, delegates.ampTemplateDelegate);
+      return enqueuePersonalizedEmail(sub, delegates.templateDelegate, delegates.subjectDelegate, { campaignId: campaign.id, orgId }, variantName, delegates.ampTemplateDelegate, fromEmail, configurationSet);
     });
 
     await Promise.all(enqueuePromises);
@@ -259,6 +269,8 @@ async function handleAutomationEmail(templateId, subscriberId, orgId) {
 
   if (!subscriber || !templateModel) return;
 
+  const { fromEmail, configurationSet } = await mailRoutingService.getSenderIdentity(orgId, 'TRANSACTIONAL');
+
   // Check suppression
   const isSuppressed = await SuppressionList.findOne({
     where: { email: subscriber.email, orgId }
@@ -283,10 +295,10 @@ async function handleAutomationEmail(templateId, subscriberId, orgId) {
   const ampTemplateDelegate = templateModel.ampHtmlContent ? Handlebars.compile(wrapHtml(templateModel.ampHtmlContent)) : null;
   const subjectDelegate = Handlebars.compile(templateModel.subject);
 
-  await enqueuePersonalizedEmail(subscriber, templateDelegate, subjectDelegate, { orgId }, null, ampTemplateDelegate);
+  await enqueuePersonalizedEmail(subscriber, templateDelegate, subjectDelegate, { orgId }, null, ampTemplateDelegate, fromEmail, configurationSet);
 }
 
-async function enqueuePersonalizedEmail(subscriber, templateDelegate, subjectDelegate, context, variant = null, ampTemplateDelegate = null) {
+async function enqueuePersonalizedEmail(subscriber, templateDelegate, subjectDelegate, context, variant = null, ampTemplateDelegate = null, fromEmail = null, configurationSet = null) {
   // Create log first to get ID for placeholder replacement
   const log = await CampaignLog.create({
     ...context,
@@ -322,8 +334,11 @@ async function enqueuePersonalizedEmail(subscriber, templateDelegate, subjectDel
     subject,
     recipient: subscriber.email,
     logId: log.id,
+    orgId: context.orgId,
     campaignId: context.campaignId,
-    ab_variant: variant
+    ab_variant: variant,
+    fromEmail,
+    configurationSet
   });
 }
 

@@ -68,10 +68,38 @@ exports.submitForm = async (req, res) => {
       email: subscriber.email
     });
 
+    // 5. Increment Conversion Count
+    await form.increment('conversionCount');
+
     res.status(200).json({ message: form.successMessage });
   } catch (error) {
     console.error('Form Submission Error:', error);
     res.status(500).json({ error: 'Failed to process form submission' });
+  }
+};
+
+exports.getActivePopups = async (req, res) => {
+  const { orgId } = req.params;
+  try {
+    const popups = await Form.findAll({
+      where: { orgId, isPopUp: true, isActive: true }
+    });
+    res.json(popups);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+exports.trackImpression = async (req, res) => {
+  const { formId } = req.params;
+  try {
+    const form = await Form.findByPk(formId);
+    if (!form) return res.status(404).json({ error: 'Form not found' });
+    
+    await form.increment('impressionCount');
+    res.json({ status: 'success' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 };
 

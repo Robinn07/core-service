@@ -1,13 +1,13 @@
 const express = require('express');
 const router = express.Router();
 const automationController = require('../controllers/automationController');
-const { authenticate } = require('../middleware/auth');
+const { authenticate, authorize } = require('../middleware/auth');
 
 router.use(authenticate);
 
-router.post('/', automationController.createAutomation);
+router.post('/', authorize(['ADMIN', 'EDITOR']), automationController.createAutomation);
 router.get('/', automationController.getAllAutomations);
-router.put('/:id/canvas', automationController.updateCanvas);
+router.put('/:id/canvas', authorize(['ADMIN', 'EDITOR']), automationController.updateCanvas);
 router.post('/trigger', automationController.triggerAutomation);
 
 module.exports = router;

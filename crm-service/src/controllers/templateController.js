@@ -1,4 +1,5 @@
 const { Template } = require('../models');
+const { Op } = require('sequelize');
 
 exports.createTemplate = async (req, res) => {
   try {
@@ -20,9 +21,38 @@ exports.createTemplate = async (req, res) => {
 exports.getAllTemplates = async (req, res) => {
   try {
     const templates = await Template.findAll({
-      where: { orgId: req.user.orgId }
+      where: {
+        [Op.or]: [
+          { orgId: req.user.orgId },
+          { isPublic: true }
+        ]
+      }
     });
     res.json(templates);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+exports.cloneTemplate = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const source = await Template.findByPk(id);
+    
+    if (!source) return res.status(404).json({ error: 'Source template not found' });
+
+    const clone = await Template.create({
+      name: `${source.name} (Copy)`,
+      subject: source.subject,
+      htmlContent: source.htmlContent,
+      mjmlContent: source.mjmlContent,
+      designData: source.designData,
+      ampHtmlContent: source.ampHtmlContent,
+      orgId: req.user.orgId,
+      isPublic: false
+    });
+
+    res.status(201).json(clone);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

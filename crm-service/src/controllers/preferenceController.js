@@ -14,6 +14,7 @@ exports.getPreferences = async (req, res) => {
       email: subscriber.email,
       firstName: subscriber.firstName,
       status: subscriber.status,
+      preferences: subscriber.preferences,
       lists: subscriber.Lists.map(l => ({ id: l.id, name: l.name }))
     });
   } catch (error) {
@@ -23,19 +24,29 @@ exports.getPreferences = async (req, res) => {
 
 exports.updatePreferences = async (req, res) => {
   const { id } = req.params;
-  const { status, unsubscribedListIds } = req.body;
+  const { status, preferences, unsubscribedListIds } = req.body;
 
   try {
     const subscriber = await Subscriber.findByPk(id);
     if (!subscriber) return res.status(404).json({ error: 'Subscriber not found' });
 
-    // 1. Handle Global Unsubscribe
-    if (status === 'unsubscribed') {
-      await subscriber.update({ status: 'unsubscribed' });
-      return res.json({ message: 'You have been unsubscribed from all emails.' });
+    const updates = {};
+
+    // 1. Handle Global Unsubscribe/Status Change
+    if (status) {
+      updates.status = status;
     }
 
-    // 2. Handle Per-List Unsubscribe
+    // 2. Handle Granular Preferences
+    if (preferences) {
+      updates.preferences = { ...subscriber.preferences, ...preferences };
+    }
+
+    if (Object.keys(updates).length > 0) {
+      await subscriber.update(updates);
+    }
+
+    // 3. Handle Per-List Unsubscribe
     if (unsubscribedListIds && unsubscribedListIds.length > 0) {
       await subscriber.removeLists(unsubscribedListIds);
     }
