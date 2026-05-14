@@ -105,5 +105,30 @@ exports.updateProfile = async (req, res) => {
   }
 };
 
+exports.scoreSubjectLine = async (req, res) => {
+  const { subject } = req.body;
+  const orgId = req.user.orgId;
+
+  try {
+    const intelligenceService = require('../services/intelligenceService');
+    const result = await intelligenceService.scoreSubjectLine(subject, orgId);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+exports.analyzeSpamRisk = async (req, res) => {
+  const { subject, htmlBody } = req.body;
+
+  try {
+    const intelligenceService = require('../services/intelligenceService');
+    const result = await intelligenceService.analyzeSpamRisk({ subject, htmlBody });
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
 
 

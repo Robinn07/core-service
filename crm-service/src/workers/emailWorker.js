@@ -79,6 +79,10 @@ async function handleCampaign(campaignId) {
   const variantA = processTemplate(templateA, abConfig.variantA?.subject);
   const variantB = isABTest ? processTemplate(templateB, abConfig.variantB?.subject) : variantA;
 
+  // From Name A/B Support
+  const fromNameA = abConfig.variantA?.fromName;
+  const fromNameB = abConfig.variantB?.fromName;
+
   // REC 3: Optimized Join for Suppression
   const { segmentConfig, orgId } = campaign;
   const { fromEmail, configurationSet } = await mailRoutingService.getSenderIdentity(orgId, 'MARKETING');
@@ -156,18 +160,49 @@ async function handleCampaign(campaignId) {
     const enqueuePromises = filteredSubscribers.map((sub, index) => {
       let variantName = null;
       let delegates = variantA;
+      let currentFromEmail = fromEmail;
 
       if (isABTest) {
         if (abConfig.winner) {
           variantName = abConfig.winner;
           delegates = variantName === 'B' ? variantB : variantA;
+          
+          const winnerFrom = variantName === 'B' ? fromNameB : fromNameA;
+          if (winnerFrom) {
+            currentFromEmail = `${winnerFrom} <${fromEmail.split('<')[1] || fromEmail.replace(/>/g, '').replace(/</g, '')}>`;
+          }
         } else {
           variantName = (totalProcessed + index) % 2 === 0 ? 'A' : 'B';
           delegates = variantName === 'B' ? variantB : variantA;
+          
+          const currentFromName = variantName === 'B' ? fromNameB : fromNameA;
+          if (currentFromName) {
+            currentFromEmail = `${currentFromName} <${fromEmail.split('<')[1] || fromEmail.replace(/>/g, '').replace(/</g, '')}>`;
+          }
         }
       }
 
-      return enqueuePersonalizedEmail(sub, delegates.templateDelegate, delegates.subjectDelegate, { campaignId: campaign.id, orgId }, variantName, delegates.ampTemplateDelegate, fromEmail, configurationSet);
+      // Deliver by Time Zone Logic
+      let individualDelay = 0;
+      if (campaign.deliverAtLocalTime && campaign.scheduledAt) {
+        const { DateTime } = require('luxon');
+        const targetTime = DateTime.fromJSDate(new Date(campaign.scheduledAt), { zone: campaign.timezone || 'UTC' });
+        const subTime = DateTime.now().setZone(sub.timezone || 'UTC');
+        
+        // Calculate what "targetTime" would be in the subscriber's local clock
+        const subTargetTime = DateTime.fromObject({
+          year: targetTime.year,
+          month: targetTime.month,
+          day: targetTime.day,
+          hour: targetTime.hour,
+          minute: targetTime.minute
+        }, { zone: sub.timezone || 'UTC' });
+
+        individualDelay = subTargetTime.diffNow().as('milliseconds');
+        if (individualDelay < 0) individualDelay = 0; // Already passed in their TZ
+      }
+
+      return enqueuePersonalizedEmail(sub, delegates.templateDelegate, delegates.subjectDelegate, { campaignId: campaign.id, orgId }, variantName, delegates.ampTemplateDelegate, currentFromEmail, configurationSet, individualDelay);
     });
 
     await Promise.all(enqueuePromises);
@@ -298,7 +333,9 @@ async function handleAutomationEmail(templateId, subscriberId, orgId) {
   await enqueuePersonalizedEmail(subscriber, templateDelegate, subjectDelegate, { orgId }, null, ampTemplateDelegate, fromEmail, configurationSet);
 }
 
-async function enqueuePersonalizedEmail(subscriber, templateDelegate, subjectDelegate, context, variant = null, ampTemplateDelegate = null, fromEmail = null, configurationSet = null) {
+async function enqueuePersonalizedEmail(subscriber, templateDelegate, subjectDelegate, context, variant = null, ampTemplateDelegate = null, fromEmail = null, configurationSet = null, delay = 0) {
+  const spintax = require('../utils/spintax');
+
   // Create log first to get ID for placeholder replacement
   const log = await CampaignLog.create({
     ...context,
@@ -307,26 +344,34 @@ async function enqueuePersonalizedEmail(subscriber, templateDelegate, subjectDel
     ab_variant: variant
   });
 
-  // Rapid Placeholder Replacement
-  const htmlBody = templateDelegate({
+  // 1. Handle Spintax first
+  const personalizedHtml = templateDelegate({
     firstName: subscriber.firstName,
     lastName: subscriber.lastName,
     email: subscriber.email,
     ...subscriber.attributes
-  }).replace(/\[\[LOG_ID\]\]/g, log.id);
+  });
 
-  const ampHtmlBody = ampTemplateDelegate ? ampTemplateDelegate({
-    firstName: subscriber.firstName,
-    lastName: subscriber.lastName,
-    email: subscriber.email,
-    ...subscriber.attributes
-  }).replace(/\[\[LOG_ID\]\]/g, log.id) : null;
+  const htmlBody = spintax.process(personalizedHtml).replace(/\[\[LOG_ID\]\]/g, log.id);
 
-  const subject = subjectDelegate({
+  let ampHtmlBody = null;
+  if (ampTemplateDelegate) {
+    const personalizedAmp = ampTemplateDelegate({
+      firstName: subscriber.firstName,
+      lastName: subscriber.lastName,
+      email: subscriber.email,
+      ...subscriber.attributes
+    });
+    ampHtmlBody = spintax.process(personalizedAmp).replace(/\[\[LOG_ID\]\]/g, log.id);
+  }
+
+  const personalizedSubject = subjectDelegate({
     firstName: subscriber.firstName,
     lastName: subscriber.lastName,
     ...subscriber.attributes
   });
+
+  const subject = spintax.process(personalizedSubject);
 
   await deliveryQueue.add('deliver-email', {
     htmlBody,
@@ -339,7 +384,7 @@ async function enqueuePersonalizedEmail(subscriber, templateDelegate, subjectDel
     ab_variant: variant,
     fromEmail,
     configurationSet
-  });
+  }, { delay });
 }
 
 

@@ -47,6 +47,39 @@ exports.verifyDomain = async (req, res) => {
   }
 };
 
+exports.checkBlacklist = async (req, res) => {
+  const { id } = req.params;
+  const orgId = req.user.orgId || req.headers['x-org-id'];
+
+  try {
+    const domain = await Domain.findOne({ where: { id, orgId } });
+    if (!domain) return res.status(404).json({ error: 'Domain not found' });
+
+    // Mock blacklist check (integrates with services like Spamhaus, Barracuda)
+    const blacklists = [
+      { name: 'Spamhaus SBL', status: 'CLEAN' },
+      { name: 'Spamhaus XBL', status: 'CLEAN' },
+      { name: 'Barracuda Rep', status: 'CLEAN' },
+      { name: 'SURBL', status: 'CLEAN' },
+      { name: 'Spamcop', status: 'CLEAN' }
+    ];
+
+    // Simulate a random "listed" domain for demo/testing if domain name starts with 'spam'
+    if (domain.domainName.startsWith('spam')) {
+      blacklists[0].status = 'LISTED';
+    }
+
+    res.json({
+      domain: domain.domainName,
+      checkedAt: new Date(),
+      status: blacklists.some(b => b.status === 'LISTED') ? 'WARNING' : 'HEALTHY',
+      results: blacklists
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
 exports.getDeliverabilityDashboard = async (req, res) => {
   try {
     const orgId = req.user.orgId || req.headers['x-org-id'];

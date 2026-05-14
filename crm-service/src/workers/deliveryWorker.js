@@ -32,6 +32,7 @@ const worker = new Worker('delivery-queue', async job => {
       to: recipient,
       subject: subject,
       html: htmlBody,
+      amp: ampHtmlBody,
       headers: {
         'List-Unsubscribe': `<mailto:unsub@${senderDomain}>, <${baseUrl}/api/public/unsubscribe/one-click?logId=${logId}>`,
         'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click'

@@ -9,6 +9,7 @@ router.post('/', domainController.addDomain);
 router.get('/', domainController.getDomains);
 router.get('/dashboard', domainController.getDeliverabilityDashboard);
 router.get('/:id/dns', domainController.getDomainDns);
+router.get('/:id/blacklist', domainController.checkBlacklist);
 router.post('/:id/verify', domainController.verifyDomain);
 
 module.exports = router;

@@ -35,6 +35,10 @@ const Campaign = sequelize.define('Campaign', {
     type: DataTypes.STRING,
     defaultValue: 'UTC'
   },
+  deliverAtLocalTime: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false
+  },
   segmentConfig: {
     type: DataTypes.JSONB,
     defaultValue: {}

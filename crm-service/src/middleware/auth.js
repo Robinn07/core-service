@@ -74,9 +74,22 @@ const authorize = (allowedRoles = []) => {
   return (req, res, next) => {
     if (process.env.SKIP_AUTH === 'true') return next();
     
-    if (!req.user || !allowedRoles.includes(req.user.role)) {
+    // Role Hierarchy
+    const roleHierarchy = {
+      'ADMIN': ['ADMIN', 'MANAGER', 'EDITOR', 'VIEWER'],
+      'MANAGER': ['MANAGER', 'EDITOR', 'VIEWER'],
+      'EDITOR': ['EDITOR', 'VIEWER'],
+      'VIEWER': ['VIEWER']
+    };
+
+    const userRole = req.user?.role || 'VIEWER';
+    const effectiveRoles = roleHierarchy[userRole] || ['VIEWER'];
+
+    const isAuthorized = allowedRoles.some(role => effectiveRoles.includes(role));
+
+    if (!req.user || !isAuthorized) {
       return res.status(403).json({ 
-        error: `Forbidden: This action requires one of the following roles: ${allowedRoles.join(', ')}` 
+        error: `Forbidden: This action requires one of the following roles: ${allowedRoles.join(', ')}. Your role: ${userRole}` 
       });
     }
     next();

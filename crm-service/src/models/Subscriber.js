@@ -103,6 +103,11 @@ const Subscriber = sequelize.define('Subscriber', {
   aiSegment: {
     type: DataTypes.STRING,
     allowNull: true
+  },
+  timezone: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    defaultValue: 'UTC'
   }
 }, {
   timestamps: true,

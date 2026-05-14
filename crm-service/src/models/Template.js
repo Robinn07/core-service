@@ -38,6 +38,18 @@ const Template = sequelize.define('Template', {
   isPublic: {
     type: DataTypes.BOOLEAN,
     defaultValue: false
+  },
+  category: {
+    type: DataTypes.STRING, // e.g. 'e-commerce', 'newsletter', 'welcome'
+    allowNull: true
+  },
+  thumbnail: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  isGallery: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false
   }
 }, {
   timestamps: true,

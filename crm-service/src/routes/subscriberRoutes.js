@@ -13,6 +13,8 @@ router.use(authenticate);
 
 // Standard CRUD
 router.post('/', authorize(['ADMIN', 'EDITOR']), subscriberController.createSubscriber);
+router.post('/verify', subscriberController.verifyEmail);
+router.post('/batch-verify', authorize(['ADMIN', 'EDITOR']), subscriberController.batchVerify);
 router.get('/', subscriberController.getAllSubscribers);
 router.get('/:id/export', subscriberController.exportData);
 router.get('/:id', subscriberController.getSubscriberById);

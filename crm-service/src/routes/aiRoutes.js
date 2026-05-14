@@ -73,6 +73,24 @@ router.post('/segmentation/cluster', aiController.clusterAudience);
  */
 router.post('/profile/update', aiController.updateProfile);
 
+/**
+ * @swagger
+ * /api/ai/intelligence/score-subject:
+ *   post:
+ *     summary: Score a subject line and provide feedback
+ *     tags: [AI]
+ */
+router.post('/intelligence/score-subject', aiController.scoreSubjectLine);
+
+/**
+ * @swagger
+ * /api/ai/intelligence/analyze-spam:
+ *   post:
+ *     summary: Analyze email content for spam risk
+ *     tags: [AI]
+ */
+router.post('/intelligence/analyze-spam', aiController.analyzeSpamRisk);
+
 module.exports = router;
 
 

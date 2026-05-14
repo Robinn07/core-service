@@ -8,6 +8,8 @@ router.use(authenticate);
 router.get('/campaign/:id/devices', analyticsController.getDeviceStats);
 router.get('/campaign/:id/geo', analyticsController.getGeoStats);
 router.get('/campaign/:id/timeline', analyticsController.getEngagementTimeline);
+router.get('/campaign/:id/clickmap', analyticsController.getClickMap);
+router.get('/billing-report', analyticsController.getBillingReport);
 router.get('/overall', analyticsController.getOverallOrgStats);
 
 module.exports = router;

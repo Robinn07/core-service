@@ -139,6 +139,90 @@ exports.getAllSubscribers = async (req, res) => {
   } catch (error) { res.status(500).json({ error: error.message }); }
 };
 
+exports.verifyEmail = async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ error: 'Email is required' });
+
+  try {
+    const dns = require('dns').promises;
+    const result = {
+      email,
+      format: /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email),
+      disposable: false,
+      mx: false,
+      score: 0
+    };
+
+    if (!result.format) return res.json(result);
+    result.score += 20;
+
+    const domain = email.split('@')[1];
+    
+    // Disposable check (mock list)
+    const disposableDomains = ['mailinator.com', 'temp-mail.org', '10minutemail.com'];
+    if (disposableDomains.includes(domain)) {
+      result.disposable = true;
+    } else {
+      result.score += 30;
+    }
+
+    // MX Record check
+    try {
+      const mx = await dns.resolveMx(domain);
+      if (mx && mx.length > 0) {
+        result.mx = true;
+        result.score += 50;
+      }
+    } catch (e) {
+      result.mx = false;
+    }
+
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+exports.batchVerify = async (req, res) => {
+  const { listId } = req.body;
+  const orgId = req.user.orgId;
+
+  try {
+    const subscribers = await Subscriber.findAll({
+      where: { orgId },
+      include: listId ? [{ model: List, where: { id: listId }, through: { attributes: [] } }] : []
+    });
+
+    const dns = require('dns').promises;
+    const results = {
+      total: subscribers.length,
+      verified: 0,
+      failed: 0,
+      details: []
+    };
+
+    for (const sub of subscribers) {
+      const domain = sub.email.split('@')[1];
+      try {
+        const mx = await dns.resolveMx(domain);
+        if (mx && mx.length > 0) {
+          results.verified++;
+        } else {
+          results.failed++;
+          await sub.update({ status: 'bounced' }); // Auto-clean
+        }
+      } catch (e) {
+        results.failed++;
+        await sub.update({ status: 'bounced' });
+      }
+    }
+
+    res.json(results);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
 exports.getSubscriberById = async (req, res) => {
   try {
     const subscriber = await Subscriber.findOne({ 
