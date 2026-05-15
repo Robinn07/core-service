@@ -17,6 +17,8 @@ class AutomationService {
     // Special handling for behavioral events
     if (triggerType === 'event_occurred' && eventType) {
       query.where.triggerConfig = { eventName: eventType };
+    } else if (triggerType === 'path_discovered' && context.pathId) {
+      query.where.triggerConfig = { pathId: context.pathId };
     }
 
     const automations = await Automation.findAll(query);

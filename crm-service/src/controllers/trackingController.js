@@ -108,13 +108,20 @@ exports.trackClick = async (req, res) => {
     const log = await CampaignLog.findByPk(logId);
     if (log) {
       const metadata = parseMetadata(ipAddress, userAgent);
+      
+      // Build attribution URL
+      const attributionUrl = new URL(url);
+      attributionUrl.searchParams.append('lx_cid', log.campaignId);
+      attributionUrl.searchParams.append('lx_sid', log.subscriberId);
+      const finalUrl = attributionUrl.toString();
+
       const eventData = {
         campaignId: log.campaignId,
         subscriberId: log.subscriberId,
         messageId: log.messageId,
         orgId: log.orgId || 'unknown',
         ab_variant: log.ab_variant,
-        url,
+        url: finalUrl,
         ipAddress,
         userAgent,
         ...metadata
@@ -157,6 +164,8 @@ exports.trackClick = async (req, res) => {
         // AI-Powered Click Fraud Check
         anomalyService.detectClickFraud(eventData);
       }
+
+      return res.redirect(finalUrl);
     }
   } catch (error) {
     console.error('Track Click Error:', error);

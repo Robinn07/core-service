@@ -66,6 +66,14 @@ const Campaign = sequelize.define('Campaign', {
   bounceCount: {
     type: DataTypes.INTEGER,
     defaultValue: 0
+  },
+  successConfig: {
+    type: DataTypes.JSONB,
+    defaultValue: {
+      targetEvent: null, // e.g., 'team_member_invited'
+      attributionWindow: 48, // hours
+      successCount: 0
+    }
   }
 }, {
   timestamps: true,

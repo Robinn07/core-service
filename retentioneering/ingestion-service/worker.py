@@ -91,31 +91,41 @@ import requests
 
 CRM_SERVICE_URL = os.getenv('CRM_SERVICE_URL', 'http://localhost:4000')
 CRM_API_KEY = os.getenv('CRM_API_KEY', '')
+ANALYTICS_SERVICE_URL = os.getenv('ANALYTICS_SERVICE_URL', 'http://localhost:8000')
 
 # ... (rest of config)
 
 def notify_crm(org_id, user_id, event_type):
-    if not CRM_API_KEY:
-        return
+    # ... existing notify_crm logic ...
+    pass
+
+def check_toxic_paths(org_id, user_id):
+    if not CRM_API_KEY: return
     
-    url = f"{CRM_SERVICE_URL}/api/automations/trigger"
-    payload = {
-        "eventName": event_type,
-        "subscriberId": user_id
-    }
-    headers = {
-        "x-api-key": CRM_API_KEY,
-        "Content-Type": "application/json"
-    }
+    url = f"{ANALYTICS_SERVICE_URL}/analytics/{org_id}/check-user/{user_id}"
+    headers = { "Authorization": f"Bearer {CRM_API_KEY}" } # Using same key for simplicity
     
     try:
-        response = requests.post(url, json=payload, headers=headers, timeout=2)
+        response = requests.get(url, headers=headers, timeout=2)
         if response.status_code == 200:
-            print(f"🔔 Automation triggered for {user_id}: {event_type}")
-        else:
-            print(f"⚠️ CRM Notification failed: {response.status_code}")
+            data = response.json()
+            if data.get("match"):
+                print(f"⚠️ Toxic Path Detected for {user_id}: {data['path_id']}")
+                trigger_path_crm(org_id, user_id, data['path_id'])
     except Exception as e:
-        print(f"❌ CRM Notification Error: {e}")
+        print(f"❌ Path Check Error: {e}")
+
+def trigger_path_crm(org_id, user_id, path_id):
+    url = f"{CRM_SERVICE_URL}/api/automations/internal/path-trigger"
+    payload = {
+        "orgId": org_id,
+        "subscriberId": user_id,
+        "pathId": path_id
+    }
+    try:
+        requests.post(url, json=payload, timeout=2)
+    except Exception as e:
+        print(f"❌ CRM Path Trigger Error: {e}")
 
 def callback(ch, method, properties, body):
     global batch, delivery_tags
@@ -129,6 +139,9 @@ def callback(ch, method, properties, body):
             
             # Notify CRM for behavioral triggers
             notify_crm(data['orgId'], data['userId'], data['event_type'])
+            
+            # Check for toxic paths
+            check_toxic_paths(data['orgId'], data['userId'])
             
             batch.append(row)
             # ... (Rest of callback)

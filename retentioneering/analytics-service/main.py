@@ -26,6 +26,9 @@ from services.journey import run_journey_mapping
 from services.sankey import run_sankey_data
 from services.attribution import run_attribution_analysis
 from services.health import calculate_health_scores, get_at_risk_users
+from services.path_discovery import discover_toxic_paths
+from services.evaluator import check_user_for_toxic_path
+from services.attribution_engine import calculate_campaign_impact
 from auth import verify_token, require_role
 from utils.config.loader import get_clickhouse_config
 
@@ -226,6 +229,23 @@ def funnel_analysis(org_id: str, token: dict = Security(verify_token)):
     result = run_funnel(df, org_id)
     set_cached_analytics(org_id, "funnel", result)
     return result
+
+@app.get("/analytics/{org_id}/toxic-paths")
+def toxic_paths(org_id: str, threshold: float = 0.5, token: dict = Security(verify_token)):
+    enforce_rls(token['uid'], org_id)
+    df = fetch_events(org_id)
+    if df.empty: raise HTTPException(status_code=404, detail="No events found")
+    return discover_toxic_paths(df, org_id, threshold)
+
+@app.get("/analytics/{org_id}/check-user/{user_id}")
+def check_user_path(org_id: str, user_id: str, token: dict = Security(verify_token)):
+    enforce_rls(token['uid'], org_id)
+    return check_user_for_toxic_path(ch_client, org_id, user_id)
+
+@app.get("/analytics/{org_id}/campaign-impact/{campaign_id}")
+def campaign_impact(org_id: str, campaign_id: str, target_event: str, window_hours: int = 48, token: dict = Security(verify_token)):
+    enforce_rls(token['uid'], org_id)
+    return calculate_campaign_impact(ch_client, org_id, campaign_id, target_event, window_hours)
 
 @app.post("/analytics/{org_id}/refresh")
 def refresh_analytics(org_id: str, token: dict = Depends(require_role(["admin"]))):

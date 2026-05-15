@@ -22,6 +22,7 @@ const Automation = sequelize.define('Automation', {
       'tag_added', 
       'event_occurred',
       'segment_entered',
+      'path_discovered',
       'unsubscribed',
       'date_based',
       'field_changed'

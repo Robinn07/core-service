@@ -62,6 +62,25 @@ exports.triggerAutomation = async (req, res) => {
   }
 };
 
+exports.triggerPathAutomation = async (req, res) => {
+  try {
+    const { pathId, subscriberId, orgId } = req.body;
+
+    if (!pathId || !subscriberId || !orgId) {
+      return res.status(400).json({ error: 'pathId, subscriberId, and orgId are required' });
+    }
+
+    await automationService.trigger(orgId, 'path_discovered', {
+      subscriberId,
+      pathId
+    });
+
+    res.json({ status: 'path_triggered', pathId });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
 exports.updateCanvas = async (req, res) => {
   const { id } = req.params;
   const { canvasState, actions } = req.body;

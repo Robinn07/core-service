@@ -3,6 +3,9 @@ const router = express.Router();
 const automationController = require('../controllers/automationController');
 const { authenticate, authorize } = require('../middleware/auth');
 
+// Internal / Service-to-Service routes
+router.post('/internal/path-trigger', automationController.triggerPathAutomation);
+
 router.use(authenticate);
 
 router.post('/', authorize(['ADMIN', 'EDITOR']), automationController.createAutomation);
