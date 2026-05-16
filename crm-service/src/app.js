@@ -17,6 +17,13 @@ require('./models');
 
 const app = express();
 
+// Database Synchronization
+if (process.env.NODE_ENV === 'development') {
+  sequelize.sync({ alter: true })
+    .then(() => logger.info('Database tables synchronized.'))
+    .catch(err => logger.error('Database sync error:', err));
+}
+
 // 1. Security Headers
 app.use(helmet());
 
@@ -33,7 +40,7 @@ app.use(pinoHttp({ logger }));
 // 4. Rate Limiting (Redis-backed)
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Limit each IP to 100 requests per windowMs
+  max: process.env.NODE_ENV === 'development' ? 1000 : 100, // Higher limit for dev
   standardHeaders: true,
   legacyHeaders: false,
   store: new RedisStore({

@@ -161,3 +161,14 @@ exports.getCampaignAnalytics = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
+
+exports.getAllCampaigns = async (req, res) => {
+  try {
+    const campaigns = await Campaign.findAll({
+      where: { orgId: req.user.orgId }
+    });
+    res.json(campaigns);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};

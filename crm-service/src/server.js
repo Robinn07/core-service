@@ -6,7 +6,7 @@ const logger = require('./utils/logger');
 validateEnv();
 
 const app = require('./app');
-const { sequelize } = require('./config/db');
+const { sequelize, connectDB } = require('./config/db');
 const redisClient = require('./config/redis');
 const emailWorker = require('./workers/emailWorker');
 const aiWorker = require('./workers/aiWorker');
@@ -18,6 +18,7 @@ const PORT = process.env.PORT || 4000;
 const startServer = async () => {
   try {
     // 2. Sync Database
+    await connectDB();
     logger.info('Database connected.');
 
     // 3. Initialize Jobs
