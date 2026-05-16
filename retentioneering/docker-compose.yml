@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+
+  clickhouse:
+    image: clickhouse/clickhouse-server
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - clickhouse_log:/var/log/clickhouse-server
+
+  ingestion-service:
+    build: ./ingestion-service
+    ports:
+      - "3000:3000"
+    environment:
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq
+      - CLICKHOUSE_HOST=clickhouse
+    depends_on:
+      - rabbitmq
+      - clickhouse
+
+  ingestion-worker:
+    build: ./ingestion-service
+    command: python worker.py
+    environment:
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq
+      - CLICKHOUSE_HOST=clickhouse
+    depends_on:
+      - rabbitmq
+      - clickhouse
+
+  analytics-service:
+    build: ./analytics-service
+    ports:
+      - "8080:8080"
+    environment:
+      - CLICKHOUSE_HOST=clickhouse
+    depends_on:
+      - clickhouse
+
+  email-service:
+    build: ./email-service
+    ports:
+      - "3001:3001"
+    environment:
+      - PORT=3001
+    # Needs Firebase credentials mounted or injected
+
+volumes:
+  rabbitmq_data:
+  clickhouse_data:
+  clickhouse_log:

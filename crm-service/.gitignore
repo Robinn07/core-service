@@ -1,0 +1,12 @@
+node_modules/
+.env
+*.log
+logs/
+.DS_Store
+dist/
+build/
+serviceAccountKey.json
+.sequelizerc
+pm2-*.log
+C:\Users\HP\.pm2/
+dump.pm2
