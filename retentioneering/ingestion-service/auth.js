@@ -9,6 +9,8 @@ if (!admin.apps.length) {
   });
 }
 
+const redis = require('./src/config/redis');
+
 /**
  * Shared Firebase Authentication Middleware with RBAC support.
  */
@@ -28,8 +30,18 @@ async function firebaseAuth(req, res, next) {
       return next();
     }
 
-    // 2. API Key Validation (B2B / External)
+    // 2. API Key Validation (B2B / External) with Redis Cache
     if (apiKey) {
+      // Check Cache First
+      const cacheKey = `api_key_auth:${apiKey}`;
+      const cachedTenantId = await redis.get(cacheKey);
+      
+      if (cachedTenantId) {
+        req.tenantId = cachedTenantId;
+        req.userRole = 'admin';
+        return next();
+      }
+
       const db = admin.firestore();
       const tenantQuery = await db.collection('tenants').where('apiKey', '==', apiKey).limit(1).get();
       
@@ -38,8 +50,13 @@ async function firebaseAuth(req, res, next) {
       }
       
       const tenantDoc = tenantQuery.docs[0];
-      req.tenantId = tenantDoc.id;
-      req.userRole = 'admin'; // API Keys are typically admin-level
+      const tenantId = tenantDoc.id;
+
+      // Cache for 10 minutes
+      await redis.setex(cacheKey, 600, tenantId);
+
+      req.tenantId = tenantId;
+      req.userRole = 'admin';
       
       return next();
     }

@@ -13,7 +13,15 @@ const worker = new Worker('webhook-queue', async job => {
     .update(JSON.stringify(payload))
     .digest('hex');
 
-  // 2. Send the request
+  // 2. Circuit Breaker Check
+  const circuitKey = `circuit_breaker:${url}`;
+  const isBroken = await connection.get(circuitKey);
+  if (isBroken) {
+    logger.warn({ url }, '🚫 Circuit broken for this URL. Skipping...');
+    return; // Silent fail to avoid infinite retries on a dead server
+  }
+
+  // 3. Send the request
   try {
     await axios.post(url, payload, {
       headers: {
@@ -23,8 +31,17 @@ const worker = new Worker('webhook-queue', async job => {
       },
       timeout: 5000 // 5 second timeout
     });
+    // Reset failures on success
+    await connection.del(`failures:${url}`);
     logger.info({ url, event: payload.event }, '✅ Webhook delivered');
   } catch (error) {
+    const failures = await connection.incr(`failures:${url}`);
+    if (failures >= 3) {
+      // Break the circuit for 10 minutes
+      await connection.setex(circuitKey, 600, 'open');
+      logger.error({ url }, '🔥 Circuit Breaker OPENED for 10 minutes');
+    }
+    
     logger.error({ url, event: payload.event, error: error.message }, '❌ Webhook delivery failed');
     throw error; // Let BullMQ handle retries
   }

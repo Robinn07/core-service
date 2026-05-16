@@ -124,8 +124,22 @@ exports.trackClick = async (req, res) => {
         url: finalUrl,
         ipAddress,
         userAgent,
-        ...metadata
+        ...metadata,
+        is_bot: false
       };
+
+      // 1. Bot Detection: Check if click is too fast (< 2s from sent)
+      const now = new Date();
+      const sentAt = new Date(log.createdAt); // Assuming log.createdAt is when the message was sent/queued
+      if (now.getTime() - sentAt.getTime() < 2000) {
+        eventData.is_bot = true;
+      }
+
+      // 2. Bot Detection: Known Crawler UAs
+      const botKeywords = ['bot', 'crawler', 'spider', 'scanner', 'monit', 'pingdom'];
+      if (botKeywords.some(keyword => userAgent.toLowerCase().includes(keyword))) {
+        eventData.is_bot = true;
+      }
 
       await EventLog.create({
         type: 'CLICK',

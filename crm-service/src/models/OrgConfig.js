@@ -13,6 +13,10 @@ const OrgConfig = sequelize.define('OrgConfig', {
   ingestionUrl: {
     type: DataTypes.STRING,
     defaultValue: 'http://localhost:3000'
+  },
+  defaultAttributionWindow: {
+    type: DataTypes.INTEGER,
+    defaultValue: 48
   }
 }, {
   timestamps: true,

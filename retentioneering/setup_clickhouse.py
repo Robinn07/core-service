@@ -17,12 +17,18 @@ client = clickhouse_connect.get_client(
 remote_table_sql = """
 CREATE TABLE IF NOT EXISTS events (
     event_id UUID,
-    event_type String,
+    org_id String,
     user_id String,
+    event_type String,
+    channel String,
+    campaign_id String,
+    ab_variant Nullable(String),
     timestamp DateTime64(3),
     metadata String
 ) ENGINE = MergeTree()
-ORDER BY (timestamp, event_type)
+PARTITION BY toYYYYMM(timestamp)
+ORDER BY (org_id, timestamp, event_type)
+TTL timestamp + INTERVAL 90 DAY
 """
 
 client.command(remote_table_sql)

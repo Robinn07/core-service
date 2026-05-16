@@ -68,7 +68,8 @@ exports.getCampaignAnalytics = async (req, res) => {
 
     const campaign = await Campaign.findOne({
       where: { id, orgId },
-      include: [{ model: Template, attributes: ['name', 'subject'] }]
+      include: [{ model: Template, attributes: ['name', 'subject'] }],
+      paranoid: false // Allow viewing analytics for soft-deleted campaigns
     });
 
     if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
@@ -142,17 +143,55 @@ exports.getCampaignAnalytics = async (req, res) => {
         });
     }
 
+    let successImpact = null;
+    if (campaign.successConfig && campaign.successConfig.targetEvent) {
+        const redis = require('../config/redis');
+        const cacheKey = `success_impact:${id}`;
+        
+        try {
+            const cachedData = await redis.get(cacheKey);
+            if (cachedData) {
+                successImpact = JSON.parse(cachedData);
+            } else {
+                const { OrgConfig } = require('../models');
+                const orgConfig = await OrgConfig.findByPk(orgId);
+                const fallbackHours = orgConfig ? orgConfig.defaultAttributionWindow : 48;
+
+                const axios = require('axios');
+                const ANALYTICS_URL = process.env.ANALYTICS_API_URL || 'http://localhost:8000';
+                const targetEvent = campaign.successConfig.targetEvent;
+                const windowHours = campaign.successConfig.attributionWindow || 0;
+                
+                const response = await axios.get(`${ANALYTICS_URL}/analytics/${orgId}/campaign-impact/${id}`, {
+                    params: { 
+                        target_event: targetEvent, 
+                        window_hours: windowHours,
+                        fallback_hours: fallbackHours 
+                    },
+                    headers: { Authorization: req.headers.authorization || '' }
+                });
+                successImpact = response.data;
+                // Cache for 15 minutes to balance fresh data vs performance
+                await redis.setex(cacheKey, 900, JSON.stringify(successImpact));
+            }
+        } catch (err) {
+            console.error('Failed to fetch/cache success impact:', err.message);
+        }
+    }
+
     res.json({
       campaign: {
           id: campaign.id,
           name: campaign.name,
           status: campaign.status,
           type: campaign.type,
-          template: campaign.Template
+          template: campaign.Template,
+          successConfig: campaign.successConfig
       },
       stats: {
           delivery: deliveryStats,
-          engagement: engagementStats
+          engagement: engagementStats,
+          successImpact: successImpact
       },
       abTest: abBreakdown
     });
