@@ -69,8 +69,24 @@ const EventLog = sequelize.define('EventLog', {
   indexes: [
     { fields: ['messageId'] },
     { fields: ['campaignId'] },
-    { fields: ['subscriberId'] }
-  ]
+    { fields: ['subscriberId'] },
+    { fields: ['createdAt'] }
+  ],
+  scopes: {
+    tenant(orgId) {
+      return {
+        where: { orgId }
+      };
+    }
+  }
 });
+
+/**
+ * ARCHIVAL STRATEGY NOTE:
+ * All new high-volume behavioral events (page views, button clicks) should be 
+ * directed to ClickHouse via the ingestion-service. This Postgres table is 
+ * reserved for campaign-scoped audit trails (opens, clicks, bounces) 
+ * for the last 90 days only.
+ */
 
 module.exports = EventLog;

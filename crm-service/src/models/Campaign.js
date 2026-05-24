@@ -77,7 +77,18 @@ const Campaign = sequelize.define('Campaign', {
   }
 }, {
   timestamps: true,
-  tableName: 'campaigns'
+  tableName: 'campaigns',
+  defaultScope: {
+    // Note: We don't add a hard default scope here because organizationId 
+    // needs to be passed dynamically. Instead, we use a 'tenant' scope.
+  },
+  scopes: {
+    tenant(orgId) {
+      return {
+        where: { orgId }
+      };
+    }
+  }
 });
 
 module.exports = Campaign;

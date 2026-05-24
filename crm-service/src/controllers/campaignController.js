@@ -4,7 +4,30 @@ const emailQueue = require('../queue/emailQueue');
 exports.createCampaign = async (req, res) => {
   try {
     const orgId = req.user.orgId;
-    const campaign = await Campaign.create({ ...req.body, orgId });
+    const { 
+      name, 
+      type, 
+      abTestConfig, 
+      scheduledAt, 
+      timezone, 
+      deliverAtLocalTime, 
+      segmentConfig, 
+      healthThresholds, 
+      successConfig 
+    } = req.body;
+
+    const campaign = await Campaign.create({ 
+      name, 
+      type, 
+      abTestConfig, 
+      scheduledAt, 
+      timezone, 
+      deliverAtLocalTime, 
+      segmentConfig, 
+      healthThresholds, 
+      successConfig,
+      orgId 
+    });
     res.status(201).json(campaign);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -75,7 +98,7 @@ exports.getCampaignAnalytics = async (req, res) => {
 
     // 1. Delivery Stats
     const deliveryStats = await CampaignLog.findAll({
-      where: { campaignId: id },
+      where: { campaignId: id, orgId },
       attributes: [
         'status',
         [Sequelize.fn('COUNT', Sequelize.col('id')), 'count']
@@ -86,7 +109,7 @@ exports.getCampaignAnalytics = async (req, res) => {
 
     // 2. Engagement Stats
     const engagementStats = await EventLog.findAll({
-      where: { campaignId: id },
+      where: { campaignId: id, orgId },
       attributes: [
         'type',
         [Sequelize.fn('COUNT', Sequelize.col('id')), 'total'],
@@ -100,7 +123,7 @@ exports.getCampaignAnalytics = async (req, res) => {
     let abBreakdown = null;
     if (campaign.type === 'AB_TEST') {
         const abStats = await EventLog.findAll({
-            where: { campaignId: id, type: ['OPEN', 'CLICK'] },
+            where: { campaignId: id, orgId, type: ['OPEN', 'CLICK'] },
             attributes: [
                 'ab_variant',
                 'type',
@@ -111,7 +134,7 @@ exports.getCampaignAnalytics = async (req, res) => {
         });
 
         const abDelivery = await CampaignLog.findAll({
-            where: { campaignId: id, status: 'SENT' },
+            where: { campaignId: id, orgId, status: 'SENT' },
             attributes: [
                 'ab_variant',
                 [Sequelize.fn('COUNT', Sequelize.col('id')), 'count']

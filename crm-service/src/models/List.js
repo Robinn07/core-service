@@ -21,7 +21,14 @@ const List = sequelize.define('List', {
   }
 }, {
   timestamps: true,
-  tableName: 'lists'
+  tableName: 'lists',
+  scopes: {
+    tenant(orgId) {
+      return {
+        where: { orgId }
+      };
+    }
+  }
 });
 
 module.exports = List;

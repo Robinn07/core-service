@@ -7,6 +7,7 @@ def calculate_campaign_impact(ch_client, org_id: str, campaign_id: str, target_e
     Calculates the 'Success Rate' of a campaign by tracking users who clicked an email
     and then performed a specific product action within the attribution window.
     """
+    assert org_id is not None, "org_id required for all analytics queries"
     
     # 1. Fetch all clicks for this campaign
     click_query = """

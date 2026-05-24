@@ -4,7 +4,15 @@ import json
 import os
 import time
 import clickhouse_connect
+import sentry_sdk
 from dotenv import load_dotenv
+
+sentry_sdk.init(
+    dsn=os.environ.get('SENTRY_DSN'),
+    environment=os.environ.get('APP_ENV', 'production'),
+    traces_sample_rate=0.1
+)
+
 from opentelemetry import trace, context
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.resources import Resource
@@ -65,25 +73,36 @@ def flush_batch(ch):
     global batch, delivery_tags, LAST_FLUSH
     if not batch: return
     
-    try:
-        with tracer.start_as_current_span("flush_to_clickhouse", attributes={"batch_size": len(batch)}):
-            client.insert('events', batch, column_names=[
-                'event_id', 'org_id', 'user_id', 'event_type', 'channel', 
-                'campaign_id', 'ab_variant', 'timestamp', 'metadata'
-            ])
-            for tag in delivery_tags:
-                ch.basic_ack(delivery_tag=tag)
-            
-            batch = []
-            delivery_tags = []
-            LAST_FLUSH = time.time()
-            print(f"✅ Batch flushed and acknowledged at {LAST_FLUSH}")
-    except Exception as e:
-        print(f"❌ ClickHouse Insert Error: {e}")
-        for tag in delivery_tags:
-            ch.basic_nack(delivery_tag=tag, requeue=True)
-        batch = []
-        delivery_tags = []
+    retry_count = 0
+    max_retries = 3
+    
+    while retry_count < max_retries:
+        try:
+            with tracer.start_as_current_span("flush_to_clickhouse", attributes={"batch_size": len(batch), "retry": retry_count}):
+                client.insert('events', batch, column_names=[
+                    'event_id', 'org_id', 'user_id', 'event_type', 'channel', 
+                    'campaign_id', 'ab_variant', 'timestamp', 'metadata'
+                ])
+                for tag in delivery_tags:
+                    ch.basic_ack(delivery_tag=tag)
+                
+                batch = []
+                delivery_tags = []
+                LAST_FLUSH = time.time()
+                print(f"✅ Batch flushed and acknowledged at {LAST_FLUSH}")
+                return # SUCCESS
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
+            retry_count += 1
+            print(f"❌ ClickHouse Insert Error (Attempt {retry_count}/{max_retries}): {e}")
+            if retry_count >= max_retries:
+                print(f"💀 Batch failed after {max_retries} attempts. Routing to DLX.")
+                for tag in delivery_tags:
+                    ch.basic_nack(delivery_tag=tag, requeue=False) # Send to DLX
+                batch = []
+                delivery_tags = []
+            else:
+                time.sleep(2 ** retry_count) # Exponential backoff
 
 import requests
 
@@ -151,16 +170,16 @@ def run_worker():
     connection = pika.BlockingConnection(pika.URLParameters(RABBITMQ_URL))
     channel = connection.channel()
     
-    DLX_NAME = 'event_ingestion_dlx'
-    FAILED_QUEUE = 'failed_events_queue'
+    DLX_NAME = 'getloopx.dlx'
+    FAILED_QUEUE = 'getloopx.events.dead'
     
     channel.exchange_declare(exchange=DLX_NAME, exchange_type='direct', durable=True)
     channel.queue_declare(queue=FAILED_QUEUE, durable=True)
-    channel.queue_bind(queue=FAILED_QUEUE, exchange=DLX_NAME, routing_key='failed')
+    channel.queue_bind(queue=FAILED_QUEUE, exchange=DLX_NAME, routing_key='events.dead')
     
     channel.queue_declare(queue=QUEUE_NAME, durable=True, arguments={
         'x-dead-letter-exchange': DLX_NAME,
-        'x-dead-letter-routing-key': 'failed'
+        'x-dead-letter-routing-key': 'events.dead'
     })
     
     channel.basic_qos(prefetch_count=BATCH_SIZE)

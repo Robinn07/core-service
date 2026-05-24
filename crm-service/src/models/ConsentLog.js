@@ -34,7 +34,14 @@ const ConsentLog = sequelize.define('ConsentLog', {
 }, {
   timestamps: true,
   tableName: 'consent_logs',
-  updatedAt: false // We only care about the creation timestamp
+  updatedAt: false, // We only care about the creation timestamp
+  scopes: {
+    tenant(orgId) {
+      return {
+        where: { orgId }
+      };
+    }
+  }
 });
 
 module.exports = ConsentLog;

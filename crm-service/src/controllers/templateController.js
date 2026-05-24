@@ -51,7 +51,18 @@ exports.getGalleryTemplates = async (req, res) => {
 exports.cloneTemplate = async (req, res) => {
   try {
     const { id } = req.params;
-    const source = await Template.findByPk(id);
+    const orgId = req.user.orgId;
+
+    const source = await Template.findOne({
+      where: {
+        id,
+        [Op.or]: [
+          { orgId },
+          { isPublic: true },
+          { isGallery: true }
+        ]
+      }
+    });
     
     if (!source) return res.status(404).json({ error: 'Source template not found' });
 
@@ -62,7 +73,7 @@ exports.cloneTemplate = async (req, res) => {
       mjmlContent: source.mjmlContent,
       designData: source.designData,
       ampHtmlContent: source.ampHtmlContent,
-      orgId: req.user.orgId,
+      orgId,
       isPublic: false
     });
 

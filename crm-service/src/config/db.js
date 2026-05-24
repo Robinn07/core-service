@@ -25,15 +25,15 @@ const connectDB = async () => {
     await sequelize.authenticate();
     console.log(isSqlite ? 'SQLite connected successfully.' : 'PostgreSQL connected successfully.');
     
-    // Sync models in dev
-    if (process.env.NODE_ENV === 'development') {
+    // Sync models in dev/test ONLY. NEVER in production.
+    if (process.env.NODE_ENV !== 'production') {
       await sequelize.sync({ alter: true });
-      console.log('Database models synced.');
+      console.log('Database models synced (Development Mode).');
     }
   } catch (error) {
     console.error('Unable to connect to the database:', error);
     // Don't exit in dev to allow debugging
-    if (process.env.NODE_ENV !== 'development') process.exit(1);
+    if (process.env.NODE_ENV !== 'production') process.exit(1);
   }
 };
 

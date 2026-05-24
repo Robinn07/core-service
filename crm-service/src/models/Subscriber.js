@@ -111,7 +111,14 @@ const Subscriber = sequelize.define('Subscriber', {
   }
 }, {
   timestamps: true,
-  tableName: 'subscribers'
+  tableName: 'subscribers',
+  scopes: {
+    tenant(orgId) {
+      return {
+        where: { orgId }
+      };
+    }
+  }
 });
 
 module.exports = Subscriber;

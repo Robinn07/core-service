@@ -43,7 +43,14 @@ const ApiKey = sequelize.define('ApiKey', {
   }
 }, {
   timestamps: true,
-  tableName: 'api_keys'
+  tableName: 'api_keys',
+  scopes: {
+    tenant(orgId) {
+      return {
+        where: { orgId }
+      };
+    }
+  }
 });
 
 module.exports = ApiKey;

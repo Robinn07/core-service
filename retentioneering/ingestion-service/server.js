@@ -2,7 +2,7 @@
 // Getloopx Ingestion Gateway | Port 3000
 
 // Initialize instrumentation first
-require('./instrumentation');
+// require('./instrumentation');
 
 const express = require('express');
 const Joi     = require('joi');
@@ -63,8 +63,8 @@ app.use(express.json());
 app.use(pinoHttp);
 
 const QUEUE_NAME = 'event_ingestion';
-const DLX_NAME = 'event_ingestion_dlx';
-const FAILED_QUEUE = 'failed_events_queue';
+const DLX_NAME = 'getloopx.dlx';
+const FAILED_QUEUE = 'getloopx.events.dead';
 let channel;
 
 // ── RabbitMQ Connection ──────────────────────────────────────────
@@ -75,13 +75,13 @@ async function initRabbitMQ() {
     
     await channel.assertExchange(DLX_NAME, 'direct', { durable: true });
     await channel.assertQueue(FAILED_QUEUE, { durable: true });
-    await channel.bindQueue(FAILED_QUEUE, DLX_NAME, 'failed');
+    await channel.bindQueue(FAILED_QUEUE, DLX_NAME, 'events.dead');
 
     await channel.assertQueue(QUEUE_NAME, { 
       durable: true,
       arguments: {
         'x-dead-letter-exchange': DLX_NAME,
-        'x-dead-letter-routing-key': 'failed'
+        'x-dead-letter-routing-key': 'events.dead'
       }
     });
 
@@ -146,6 +146,25 @@ app.get('/metrics', async (req, res) => {
   }
 });
 
+// ── POST /auth/revoke ───────────────────────────────────────────
+app.post('/auth/revoke', apiKeyAuth, async (req, res) => {
+  const { token } = req.body;
+  if (!token) return res.status(400).json({ error: "Token required" });
+
+  try {
+    const crypto = require('crypto');
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    
+    // Block for 24 hours (or until token naturally expires)
+    await redisClient.set(`revoked:${tokenHash}`, 'true', 'EX', 86400);
+    
+    logger.info({ tokenHash }, 'Token revoked');
+    res.json({ status: 'revoked' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── POST /track-event ───────────────────────────────────────────
 app.post('/track-event', apiKeyAuth, rateLimiter(), async (req, res) => {
   const { error, value } = eventSchema.validate(req.body);
@@ -164,6 +183,7 @@ app.post('/track-event', apiKeyAuth, rateLimiter(), async (req, res) => {
 
   const event = {
     ...value,
+    orgId: req.tenantId, // Force overwrite with verified tenantId
     event_id: uuidv4(),
     timestamp: new Date().toISOString(),
   };
