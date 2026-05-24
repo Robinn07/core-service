@@ -5,6 +5,26 @@ import os
 import json
 import clickhouse_connect
 import structlog
+import sentry_sdk
+from sentry_sdk.integrations.fastapi import FastApiIntegration
+from sentry_sdk.integrations.starlette import StarletteIntegration
+
+def _scrub_event(event, hint):
+    if 'request' in event and 'data' in event['request']:
+        for key in ['api_key', 'token', 'password']:
+            if isinstance(event['request']['data'], dict):
+                event['request']['data'].pop(key, None)
+    return event
+
+sentry_sdk.init(
+    dsn=os.environ.get('SENTRY_DSN'),
+    environment=os.environ.get('APP_ENV', 'production'),
+    integrations=[FastApiIntegration(), StarletteIntegration()],
+    traces_sample_rate=0.2,
+    profiles_sample_rate=0.1,
+    before_send=_scrub_event
+)
+
 from fastapi import FastAPI, HTTPException, Security, Request, Depends, BackgroundTasks
 from fastapi.security import HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware

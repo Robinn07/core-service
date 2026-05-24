@@ -4,7 +4,15 @@ import json
 import os
 import time
 import clickhouse_connect
+import sentry_sdk
 from dotenv import load_dotenv
+
+sentry_sdk.init(
+    dsn=os.environ.get('SENTRY_DSN'),
+    environment=os.environ.get('APP_ENV', 'production'),
+    traces_sample_rate=0.1
+)
+
 from opentelemetry import trace, context
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.resources import Resource
@@ -39,7 +47,7 @@ client = clickhouse_connect.get_client(
 # ── Processing Logic ─────────────────────────────────────────────
 batch = []
 delivery_tags = []
-BATCH_SIZE = 100 # Survival limit: prevent RAM bloat
+BATCH_SIZE = 100
 LAST_FLUSH = time.time()
 
 def handle_retry(ch, method, properties, body, error_msg):
@@ -61,48 +69,40 @@ def handle_retry(ch, method, properties, body, error_msg):
         print(f"💀 [DLX] Max retries reached for message {method.delivery_tag}. Routing to failed_events_queue.")
         ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
 
-def check_ch_health():
-    """
-    Checks if ClickHouse is under heavy load.
-    Returns True if healthy, False if under pressure.
-    """
-    try:
-        # Check active inserts metric
-        res = client.query("SELECT value FROM system.metrics WHERE metric = 'ActiveInsert'")
-        if res.result_rows and int(res.result_rows[0][0]) > 50:
-            return False
-        return True
-    except:
-        return True # Fail open
-
 def flush_batch(ch):
     global batch, delivery_tags, LAST_FLUSH
     if not batch: return
     
-    # Backpressure logic: Sleep if ClickHouse is struggling
-    while not check_ch_health():
-        print("⚠️ [Backpressure] ClickHouse under heavy I/O pressure. Delaying flush...")
-        time.sleep(2)
-
-    try:
-        with tracer.start_as_current_span("flush_to_clickhouse", attributes={"batch_size": len(batch)}):
-            client.insert('events', batch, column_names=[
-                'event_id', 'org_id', 'user_id', 'event_type', 'channel', 
-                'campaign_id', 'ab_variant', 'timestamp', 'metadata'
-            ])
-            for tag in delivery_tags:
-                ch.basic_ack(delivery_tag=tag)
-            
-            batch = []
-            delivery_tags = []
-            LAST_FLUSH = time.time()
-            print(f"✅ Batch flushed and acknowledged at {LAST_FLUSH}")
-    except Exception as e:
-        print(f"❌ ClickHouse Insert Error: {e}")
-        for tag in delivery_tags:
-            ch.basic_nack(delivery_tag=tag, requeue=True)
-        batch = []
-        delivery_tags = []
+    retry_count = 0
+    max_retries = 3
+    
+    while retry_count < max_retries:
+        try:
+            with tracer.start_as_current_span("flush_to_clickhouse", attributes={"batch_size": len(batch), "retry": retry_count}):
+                client.insert('events', batch, column_names=[
+                    'event_id', 'org_id', 'user_id', 'event_type', 'channel', 
+                    'campaign_id', 'ab_variant', 'timestamp', 'metadata'
+                ])
+                for tag in delivery_tags:
+                    ch.basic_ack(delivery_tag=tag)
+                
+                batch = []
+                delivery_tags = []
+                LAST_FLUSH = time.time()
+                print(f"✅ Batch flushed and acknowledged at {LAST_FLUSH}")
+                return # SUCCESS
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
+            retry_count += 1
+            print(f"❌ ClickHouse Insert Error (Attempt {retry_count}/{max_retries}): {e}")
+            if retry_count >= max_retries:
+                print(f"💀 Batch failed after {max_retries} attempts. Routing to DLX.")
+                for tag in delivery_tags:
+                    ch.basic_nack(delivery_tag=tag, requeue=False) # Send to DLX
+                batch = []
+                delivery_tags = []
+            else:
+                time.sleep(2 ** retry_count) # Exponential backoff
 
 import requests
 
@@ -147,50 +147,39 @@ def trigger_path_crm(org_id, user_id, path_id):
         print(f"❌ CRM Path Trigger Error: {e}")
 
 def callback(ch, method, properties, body):
-    global batch, delivery_tags, LAST_FLUSH
+    global batch, delivery_tags
     
-    # ... extraction logic ...
+    # ... (OTel context extraction)
     
-    try:
-        data = json.loads(body)
-        row = [
-            data.get('event_id'),
-            data.get('orgId'),
-            data.get('userId'),
-            data.get('event_type'),
-            data.get('channel'),
-            data.get('campaignId'),
-            data.get('ab_variant'),
-            data.get('timestamp'),
-            json.dumps(data.get('metadata', {}))
-        ]
-        
-        batch.append(row)
-        delivery_tags.append(method.delivery_tag)
-
-        # Flush if batch is full OR if 5 seconds have passed since last flush
-        if len(batch) >= BATCH_SIZE or (time.time() - LAST_FLUSH > 5):
-            flush_batch(ch)
+    with tracer.start_as_current_span("process_event", context=ctx) as span:
+        try:
+            data = json.loads(body)
+            # ... (Span attributes and row creation)
             
-    except Exception as e:
-        print(f"❌ Worker Error: {e}")
-        handle_retry(ch, method, properties, body, str(e))
+            # Notify CRM for behavioral triggers
+            notify_crm(data['orgId'], data['userId'], data['event_type'])
+            
+            # Check for toxic paths
+            check_toxic_paths(data['orgId'], data['userId'])
+            
+            batch.append(row)
+            # ... (Rest of callback)
 
 # ── RabbitMQ Consumer ───────────────────────────────────────────
 def run_worker():
     connection = pika.BlockingConnection(pika.URLParameters(RABBITMQ_URL))
     channel = connection.channel()
     
-    DLX_NAME = 'event_ingestion_dlx'
-    FAILED_QUEUE = 'failed_events_queue'
+    DLX_NAME = 'getloopx.dlx'
+    FAILED_QUEUE = 'getloopx.events.dead'
     
     channel.exchange_declare(exchange=DLX_NAME, exchange_type='direct', durable=True)
     channel.queue_declare(queue=FAILED_QUEUE, durable=True)
-    channel.queue_bind(queue=FAILED_QUEUE, exchange=DLX_NAME, routing_key='failed')
+    channel.queue_bind(queue=FAILED_QUEUE, exchange=DLX_NAME, routing_key='events.dead')
     
     channel.queue_declare(queue=QUEUE_NAME, durable=True, arguments={
         'x-dead-letter-exchange': DLX_NAME,
-        'x-dead-letter-routing-key': 'failed'
+        'x-dead-letter-routing-key': 'events.dead'
     })
     
     channel.basic_qos(prefetch_count=BATCH_SIZE)

@@ -43,7 +43,14 @@ const Automation = sequelize.define('Automation', {
   }
 }, {
   timestamps: true,
-  tableName: 'automations'
+  tableName: 'automations',
+  scopes: {
+    tenant(orgId) {
+      return {
+        where: { orgId }
+      };
+    }
+  }
 });
 
 module.exports = Automation;

@@ -13,16 +13,23 @@ exports.createAutomation = async (req, res) => {
 
     if (actions && actions.length > 0) {
       for (const action of actions) {
+        const { type, config, delay, order } = action;
         await AutomationAction.create({
-          ...action,
+          type,
+          config,
+          delay,
+          order,
           automationId: automation.id
         });
       }
     }
 
-    const fullAutomation = await Automation.findByPk(automation.id, {
+    const fullAutomation = await Automation.findOne({
+      where: { id: automation.id, orgId: req.user.orgId },
       include: [{ model: AutomationAction, as: 'actions' }]
     });
+
+    if (!fullAutomation) return res.status(404).json({ error: 'Automation not found' });
 
     res.status(201).json(fullAutomation);
   } catch (error) {
@@ -98,7 +105,10 @@ exports.updateCanvas = async (req, res) => {
     }
 
     // 1. Update Automation canvasState
-    await automation.update({ canvasState }, { transaction });
+    await automation.update({ canvasState }, { 
+      transaction,
+      fields: ['canvasState'] 
+    });
 
     // 2. Clear existing actions
     await AutomationAction.destroy({
@@ -109,8 +119,12 @@ exports.updateCanvas = async (req, res) => {
     // 3. Rebuild actions
     if (actions && actions.length > 0) {
       for (const actionData of actions) {
+        const { type, config, delay, order } = actionData;
         await AutomationAction.create({
-          ...actionData,
+          type,
+          config,
+          delay,
+          order,
           automationId: id
         }, { transaction });
       }
@@ -118,9 +132,12 @@ exports.updateCanvas = async (req, res) => {
 
     await transaction.commit();
 
-    const updatedAutomation = await Automation.findByPk(id, {
+    const updatedAutomation = await Automation.findOne({
+      where: { id, orgId: req.user.orgId },
       include: [{ model: AutomationAction, as: 'actions' }]
     });
+
+    if (!updatedAutomation) return res.status(404).json({ error: 'Automation not found' });
 
     res.json(updatedAutomation);
   } catch (error) {

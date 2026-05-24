@@ -3,6 +3,41 @@ const { forwardEvent } = require('../services/ingestionService');
 const emailQueue = require('../queue/emailQueue');
 const anomalyService = require('../services/anomalyService');
 const webhookService = require('../services/webhookService');
+const logger = require('../utils/logger');
+const crypto = require('crypto');
+
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+
+exports.handleStripeWebhook = async (req, res) => {
+  const sig = req.headers['stripe-signature'];
+  const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+  let event;
+
+  try {
+    event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
+  } catch (err) {
+    logger.warn({ 
+      ip: req.ip, 
+      error: err.message, 
+      payloadHash: crypto.createHash('sha256').update(req.body).digest('hex') 
+    }, '❌ Stripe Webhook Signature Verification Failed');
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  // Handle the event
+  switch (event.type) {
+    case 'payment_intent.succeeded':
+      const paymentIntent = event.data.object;
+      logger.info({ id: paymentIntent.id }, '💰 Stripe Payment Intent Succeeded');
+      // Logic to update subscription or credits would go here
+      break;
+    default:
+      logger.debug({ type: event.type }, 'ℹ️ Unhandled Stripe event type');
+  }
+
+  res.json({ received: true });
+};
 
 exports.handleSESWebhook = async (req, res) => {
   try {

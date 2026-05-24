@@ -8,6 +8,7 @@ def discover_toxic_paths(df: pd.DataFrame, org_id: str, threshold: float = 0.5) 
     Identifies event sequences (paths) that have a high drop-off rate.
     threshold: Minimum drop-off percentage to consider a path 'toxic'.
     """
+    assert org_id is not None, "org_id required for all analytics queries"
     if df.empty:
         return {"error": "No events found"}
 

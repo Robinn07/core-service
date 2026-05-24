@@ -53,7 +53,14 @@ const Template = sequelize.define('Template', {
   }
 }, {
   timestamps: true,
-  tableName: 'templates'
+  tableName: 'templates',
+  scopes: {
+    tenant(orgId) {
+      return {
+        where: { orgId }
+      };
+    }
+  }
 });
 
 module.exports = Template;

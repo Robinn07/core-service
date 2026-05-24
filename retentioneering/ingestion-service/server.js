@@ -2,7 +2,7 @@
 // Getloopx Ingestion Gateway | Port 3000
 
 // Initialize instrumentation first
-require('./instrumentation');
+// require('./instrumentation');
 
 const express = require('express');
 const Joi     = require('joi');
@@ -58,33 +58,13 @@ const pinoHttp = require('pino-http')({
 });
 require('dotenv').config();
 
-const cors = require('cors');
-
 const app = express();
 app.use(express.json());
-
-// ── Security: CORS Origin Validation ─────────────────────────────
-const corsOptions = {
-  origin: function (origin, callback) {
-    // In production, you'd check this against a database of authorized domains
-    // For now, allow local dev and a wildcard (to be refined via dashboard)
-    const whitelist = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : ['http://localhost:4000'];
-    if (!origin || whitelist.indexOf(origin) !== -1 || process.env.NODE_ENV === 'development') {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
-  methods: ['POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'x-api-key', 'Authorization']
-};
-app.use(cors(corsOptions));
-
 app.use(pinoHttp);
 
 const QUEUE_NAME = 'event_ingestion';
-const DLX_NAME = 'event_ingestion_dlx';
-const FAILED_QUEUE = 'failed_events_queue';
+const DLX_NAME = 'getloopx.dlx';
+const FAILED_QUEUE = 'getloopx.events.dead';
 let channel;
 
 // ── RabbitMQ Connection ──────────────────────────────────────────
@@ -95,14 +75,13 @@ async function initRabbitMQ() {
     
     await channel.assertExchange(DLX_NAME, 'direct', { durable: true });
     await channel.assertQueue(FAILED_QUEUE, { durable: true });
-    await channel.bindQueue(FAILED_QUEUE, DLX_NAME, 'failed');
+    await channel.bindQueue(FAILED_QUEUE, DLX_NAME, 'events.dead');
 
     await channel.assertQueue(QUEUE_NAME, { 
       durable: true,
       arguments: {
         'x-dead-letter-exchange': DLX_NAME,
-        'x-dead-letter-routing-key': 'failed',
-        'x-max-priority': 10
+        'x-dead-letter-routing-key': 'events.dead'
       }
     });
 
@@ -154,7 +133,6 @@ const eventSchema = Joi.object({
     device:   Joi.string().optional(),
     country:  Joi.string().optional(),
     link_url: Joi.string().uri().optional(),
-    is_bot:   Joi.boolean().optional().default(false),
   }).default({}),
 });
 
@@ -165,6 +143,25 @@ app.get('/metrics', async (req, res) => {
     res.end(await client.register.metrics());
   } catch (ex) {
     res.status(500).end(ex);
+  }
+});
+
+// ── POST /auth/revoke ───────────────────────────────────────────
+app.post('/auth/revoke', apiKeyAuth, async (req, res) => {
+  const { token } = req.body;
+  if (!token) return res.status(400).json({ error: "Token required" });
+
+  try {
+    const crypto = require('crypto');
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    
+    // Block for 24 hours (or until token naturally expires)
+    await redisClient.set(`revoked:${tokenHash}`, 'true', 'EX', 86400);
+    
+    logger.info({ tokenHash }, 'Token revoked');
+    res.json({ status: 'revoked' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -186,6 +183,7 @@ app.post('/track-event', apiKeyAuth, rateLimiter(), async (req, res) => {
 
   const event = {
     ...value,
+    orgId: req.tenantId, // Force overwrite with verified tenantId
     event_id: uuidv4(),
     timestamp: new Date().toISOString(),
   };
@@ -225,41 +223,6 @@ app.get('/health', async (req, res) => {
 app.use((err, req, res, next) => {
   logger.error({ err }, 'Unhandled Global Error');
   res.status(500).json({ error: err.message });
-});
-
-// ── POST /s2s/convert ───────────────────────────────────────────
-app.post('/s2s/convert', apiKeyAuth, async (req, res) => {
-  const s2sSchema = Joi.object({
-    orgId:      Joi.string().required(),
-    userId:     Joi.string().optional(),
-    email:      Joi.string().email().optional(),
-    event_type: Joi.string().required(),
-    campaignId: Joi.string().optional(), // If known
-    metadata:   Joi.object().default({}),
-  }).or('userId', 'email');
-
-  const { error, value } = s2sSchema.validate(req.body);
-  if (error) return res.status(422).json({ error: error.details[0].message });
-
-  // If email is provided but no userId, we can flag this for the worker to resolve
-  // or just pass it through as userId = email for now (common practice)
-  const event = {
-    orgId: value.orgId,
-    userId: value.userId || value.email,
-    event_type: value.event_type,
-    channel: 'S2S',
-    campaignId: value.campaignId || 'S2S_UNSPECIFIED',
-    metadata: { ...value.metadata, s2s: true },
-    event_id: uuidv4(),
-    timestamp: new Date().toISOString(),
-  };
-
-  try {
-    channel.sendToQueue(QUEUE_NAME, Buffer.from(JSON.stringify(event)), { persistent: true });
-    return res.status(202).json({ status: 'accepted', event_id: event.event_id });
-  } catch (err) {
-    return res.status(503).json({ error: 'Failed to queue S2S event' });
-  }
 });
 
 app.listen(3000, () => logger.info('✅ Getloopx Ingestion live on port 3000'));

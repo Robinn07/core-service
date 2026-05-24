@@ -37,7 +37,14 @@ const CampaignLog = sequelize.define('CampaignLog', {
   }
 }, {
   timestamps: true,
-  tableName: 'campaign_logs'
+  tableName: 'campaign_logs',
+  scopes: {
+    tenant(orgId) {
+      return {
+        where: { orgId }
+      };
+    }
+  }
 });
 
 module.exports = CampaignLog;

@@ -33,7 +33,14 @@ const WebhookSubscription = sequelize.define('WebhookSubscription', {
   }
 }, {
   timestamps: true,
-  tableName: 'webhook_subscriptions'
+  tableName: 'webhook_subscriptions',
+  scopes: {
+    tenant(orgId) {
+      return {
+        where: { orgId }
+      };
+    }
+  }
 });
 
 module.exports = WebhookSubscription;

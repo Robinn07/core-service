@@ -38,7 +38,14 @@ const Domain = sequelize.define('Domain', {
   }
 }, {
   timestamps: true,
-  tableName: 'domains'
+  tableName: 'domains',
+  scopes: {
+    tenant(orgId) {
+      return {
+        where: { orgId }
+      };
+    }
+  }
 });
 
 module.exports = Domain;

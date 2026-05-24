@@ -34,7 +34,7 @@ const authenticate = async (req, res, next) => {
   const token = authHeader.split('Bearer ')[1];
   try {
     const decodedToken = await admin.auth().verifyIdToken(token);
-    const orgId = decodedToken.orgId || decodedToken.uid;
+    const orgId = decodedToken.orgId || decodedToken.uid || process.env.CRM_ORG_ID || 'crm-system';
     
     // Fetch Role from DB
     const userRole = await UserRole.findOne({ where: { uid: decodedToken.uid, orgId } });
@@ -43,8 +43,8 @@ const authenticate = async (req, res, next) => {
     req.user = { uid: decodedToken.uid, email: decodedToken.email, orgId, role };
     next();
   } catch (error) {
-    logger.error('Auth Error:', error.message);
-    res.status(403).json({ error: 'Unauthorized: Invalid token' });
+    logger.error('Auth Error:', error);
+    res.status(403).json({ error: 'Unauthorized: Invalid token', details: error.message });
   }
 };
 

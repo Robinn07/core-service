@@ -30,6 +30,10 @@ exports.getDomains = async (req, res) => {
 exports.getDomainDns = async (req, res) => {
   try {
     const { id } = req.params;
+    const orgId = req.user.orgId;
+    const domain = await Domain.findOne({ where: { id, orgId } });
+    if (!domain) return res.status(404).json({ error: 'Domain not found' });
+
     const dnsRecords = await domainService.getDnsRecords(id);
     res.json(dnsRecords);
   } catch (error) {
@@ -40,6 +44,10 @@ exports.getDomainDns = async (req, res) => {
 exports.verifyDomain = async (req, res) => {
   try {
     const { id } = req.params;
+    const orgId = req.user.orgId;
+    const domainCheck = await Domain.findOne({ where: { id, orgId } });
+    if (!domainCheck) return res.status(404).json({ error: 'Domain not found' });
+
     const domain = await domainService.checkVerificationStatus(id);
     res.json(domain);
   } catch (error) {

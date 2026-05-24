@@ -13,15 +13,7 @@ const worker = new Worker('webhook-queue', async job => {
     .update(JSON.stringify(payload))
     .digest('hex');
 
-  // 2. Circuit Breaker Check
-  const circuitKey = `circuit_breaker:${url}`;
-  const isBroken = await connection.get(circuitKey);
-  if (isBroken) {
-    logger.warn({ url }, '🚫 Circuit broken for this URL. Skipping...');
-    return; // Silent fail to avoid infinite retries on a dead server
-  }
-
-  // 3. Send the request
+  // 2. Send the request
   try {
     await axios.post(url, payload, {
       headers: {
@@ -29,20 +21,11 @@ const worker = new Worker('webhook-queue', async job => {
         'X-GetLoopX-Signature': signature,
         'X-GetLoopX-Event': payload.event
       },
-      timeout: 5000 // 5 second timeout
+      timeout: 10000 // 10 second timeout
     });
-    // Reset failures on success
-    await connection.del(`failures:${url}`);
-    logger.info({ url, event: payload.event }, '✅ Webhook delivered');
+    logger.info({ url, event: payload.event, jobId: job.id }, '✅ Webhook delivered');
   } catch (error) {
-    const failures = await connection.incr(`failures:${url}`);
-    if (failures >= 3) {
-      // Break the circuit for 10 minutes
-      await connection.setex(circuitKey, 600, 'open');
-      logger.error({ url }, '🔥 Circuit Breaker OPENED for 10 minutes');
-    }
-    
-    logger.error({ url, event: payload.event, error: error.message }, '❌ Webhook delivery failed');
+    logger.error({ url, event: payload.event, error: error.message, jobId: job.id }, '❌ Webhook delivery failed');
     throw error; // Let BullMQ handle retries
   }
 }, { 
@@ -50,9 +33,32 @@ const worker = new Worker('webhook-queue', async job => {
   settings: {
     backoff: {
       type: 'exponential',
-      delay: 5000
+      delay: 2000
     }
-  }
+  },
+  attempts: 5,
+  removeOnComplete: { count: 100 },
+  removeOnFail: false // Keep for inspection
+});
+
+const Sentry = require('@sentry/node');
+
+// Global BullMQ error handler
+worker.on('failed', (job, err) => {
+  Sentry.captureException(err, {
+    tags: { worker: 'webhookWorker', jobId: job.id },
+    extra: { jobData: job.data }
+  });
+  logger.error({ 
+    jobId: job.id, 
+    data: job.data, 
+    error: err.message 
+  }, '🚨 BullMQ Job Failed');
+});
+
+// Stalled job handler
+worker.on('stalled', (jobId) => {
+  logger.warn({ jobId, msg: 'Job stalled — possible worker crash or long-running sync' }, '⚠️ BullMQ Job Stalled');
 });
 
 module.exports = worker;

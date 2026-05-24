@@ -81,7 +81,14 @@ const Form = sequelize.define('Form', {
   }
 }, {
   timestamps: true,
-  tableName: 'forms'
+  tableName: 'forms',
+  scopes: {
+    tenant(orgId) {
+      return {
+        where: { orgId }
+      };
+    }
+  }
 });
 
 module.exports = Form;

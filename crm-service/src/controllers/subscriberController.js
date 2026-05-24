@@ -3,17 +3,11 @@ const { Op } = require('sequelize');
 const crmService = require('../services/crmService');
 const appEmitter = require('../utils/events');
 
-/**
- * @swagger
- * components:
- *   schemas:
-// ...
- const doiService = require('../services/doiService');
+const doiService = require('../services/doiService');
 
- /**
-  * @swagger
- // ...
-  */
+/**
+ * Subscriber Controller
+ */
 
  exports.createSubscriber = async (req, res) => {
    try {
@@ -239,7 +233,7 @@ exports.getSubscriberById = async (req, res) => {
 
 exports.updateSubscriber = async (req, res) => {
   try {
-    const { firstName, lastName, attributes, status, listIds, tagIds } = req.body;
+    const { firstName, lastName, attributes, status, listIds, tagIds, timezone, preferredSendHour, preferences } = req.body;
     const subscriber = await Subscriber.findOne({ where: { id: req.params.id, orgId: req.user.orgId } });
     if (!subscriber) return res.status(404).json({ error: 'Not found' });
     
@@ -248,14 +242,25 @@ exports.updateSubscriber = async (req, res) => {
     const oldLastName = subscriber.lastName;
     const oldAttributes = { ...subscriber.attributes };
 
-    await subscriber.update({ firstName, lastName, attributes, status });
+    const updateData = {};
+    if (firstName !== undefined) updateData.firstName = firstName;
+    if (lastName !== undefined) updateData.lastName = lastName;
+    if (attributes !== undefined) updateData.attributes = attributes;
+    if (status !== undefined) updateData.status = status;
+    if (timezone !== undefined) updateData.timezone = timezone;
+    if (preferredSendHour !== undefined) updateData.preferredSendHour = preferredSendHour;
+    if (preferences !== undefined) updateData.preferences = preferences;
+
+    await subscriber.update(updateData, {
+      fields: ['firstName', 'lastName', 'attributes', 'status', 'timezone', 'preferredSendHour', 'preferences']
+    });
 
     // Triggers
-    if (status !== oldStatus && status === 'unsubscribed') {
+    if (status && status !== oldStatus && status === 'unsubscribed') {
       appEmitter.emit('unsubscribed', subscriber);
     }
-    if (firstName !== oldFirstName) appEmitter.emit('field_changed', { subscriber, field: 'firstName', oldValue: oldFirstName, newValue: firstName });
-    if (lastName !== oldLastName) appEmitter.emit('field_changed', { subscriber, field: 'lastName', oldValue: oldLastName, newValue: lastName });
+    if (firstName && firstName !== oldFirstName) appEmitter.emit('field_changed', { subscriber, field: 'firstName', oldValue: oldFirstName, newValue: firstName });
+    if (lastName && lastName !== oldLastName) appEmitter.emit('field_changed', { subscriber, field: 'lastName', oldValue: oldLastName, newValue: lastName });
     
     // Check for attribute changes
     if (attributes) {

@@ -25,10 +25,56 @@ const parseMetadata = (ip, ua) => {
   };
 };
 
+const jwt = require('jsonwebtoken');
+
+exports.handleConsent = async (req, res) => {
+  const { subscriberId, consentType, granted } = req.body;
+  const orgId = req.user.orgId;
+
+  try {
+    const subscriber = await Subscriber.findOne({ where: { id: subscriberId, orgId } });
+    if (!subscriber) return res.status(404).json({ error: 'Subscriber not found' });
+
+    const updateData = granted 
+      ? { consentGrantedAt: new Date(), consentRevokedAt: null }
+      : { consentRevokedAt: new Date(), consentGrantedAt: null };
+
+    await subscriber.update(updateData);
+
+    // Issue a signed consent token (JWT)
+    const token = jwt.sign(
+      { subscriberId, orgId, granted }, 
+      process.env.JWT_SECRET || 'secret', 
+      { expiresIn: '24h' }
+    );
+
+    res.json({ status: 'consent_updated', token });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+const validateConsent = (token) => {
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret');
+    return decoded.granted === true;
+  } catch (err) {
+    return false;
+  }
+};
+
 exports.trackOpen = async (req, res) => {
   const { logId } = req.params;
+  const { lx_consent } = req.query; // Consent token sent from client
   const ipAddress = req.ip || req.headers['x-forwarded-for'] || req.connection.remoteAddress;
   const userAgent = req.headers['user-agent'];
+
+  if (!validateConsent(lx_consent)) {
+    logger.warn({ logId, ipAddress }, '🚫 Track Open rejected: Missing or invalid consent token');
+    // Return transparent pixel even if rejected to avoid breaking UI/Email
+    const pixel = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
+    return res.status(200).contentType('image/gif').send(pixel);
+  }
 
   try {
     const log = await CampaignLog.findByPk(logId);
@@ -98,11 +144,16 @@ exports.trackOpen = async (req, res) => {
 
 exports.trackClick = async (req, res) => {
   const { logId } = req.params;
-  const { url } = req.query;
+  const { url, lx_consent } = req.query;
   const ipAddress = req.ip || req.headers['x-forwarded-for'] || req.connection.remoteAddress;
   const userAgent = req.headers['user-agent'];
 
   if (!url) return res.status(400).send('URL is required');
+
+  if (!validateConsent(lx_consent)) {
+    logger.warn({ logId, ipAddress }, '🚫 Track Click rejected: Missing or invalid consent token');
+    return res.redirect(url);
+  }
 
   try {
     const log = await CampaignLog.findByPk(logId);
