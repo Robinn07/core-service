@@ -17,6 +17,32 @@ const OrgConfig = sequelize.define('OrgConfig', {
   defaultAttributionWindow: {
     type: DataTypes.INTEGER,
     defaultValue: 48
+  },
+  // Branding
+  orgName: {
+    type: DataTypes.STRING,
+    defaultValue: 'My Organization'
+  },
+  supportEmail: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  logoUrl: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  // Compliance & Email Settings
+  physicalAddress: {
+    type: DataTypes.TEXT,
+    allowNull: true
+  },
+  timezone: {
+    type: DataTypes.STRING,
+    defaultValue: 'UTC'
+  },
+  defaultFromName: {
+    type: DataTypes.STRING,
+    allowNull: true
   }
 }, {
   timestamps: true,

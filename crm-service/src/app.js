@@ -172,6 +172,8 @@ app.use('/api/ai', require('./routes/aiRoutes'));
 app.use('/api/domains', require('./routes/domainRoutes'));
 app.use('/api/analytics', require('./routes/analyticsRoutes'));
 app.use('/api/api-keys', require('./routes/apiKeyRoutes'));
+app.use('/api/org', require('./routes/orgRoutes'));
+app.use('/api/team', require('./routes/teamRoutes'));
 app.use('/api/forms', require('./routes/formRoutes'));
 app.use('/api/public', require('./routes/publicRoutes'));
 
