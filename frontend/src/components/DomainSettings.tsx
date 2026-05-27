@@ -1,4 +1,4 @@
-import { AlertCircle, CheckCircle2, Copy, ExternalLink, Globe, Loader2, RefreshCw, ShieldCheck } from "lucide-react";
+import { AlertCircle, CheckCircle2, Copy, ExternalLink, Globe, Loader2, RefreshCw, ShieldCheck, Smartphone } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api } from "../lib/api";
 
@@ -10,9 +10,11 @@ export function DomainSettings() {
   const [selectedDomain, setSelectedDomain] = useState<any>(null);
   const [dnsRecords, setDnsRecords] = useState<any>(null);
   const [verifying, setVerifying] = useState(false);
+  const [dashboard, setDashboard] = useState<any>(null);
 
   useEffect(() => {
     fetchDomains();
+    fetchDashboard();
   }, []);
 
   const fetchDomains = async () => {
@@ -23,6 +25,15 @@ export function DomainSettings() {
       console.error("Failed to fetch domains:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchDashboard = async () => {
+    try {
+      const data = await api.get("/domains/dashboard");
+      setDashboard(data);
+    } catch (error) {
+      console.error("Failed to fetch dashboard:", error);
     }
   };
 
@@ -86,6 +97,42 @@ export function DomainSettings() {
 
   return (
     <div className="space-y-6">
+      {dashboard && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="p-6 rounded-3xl bg-white border border-slate-200 shadow-sm">
+            <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Domain Reputation</div>
+            <div className="flex items-end gap-2">
+              <div className={`text-2xl font-black ${parseFloat(dashboard.reputation.bounceRate) > 5 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                {parseFloat(dashboard.reputation.bounceRate) > 5 ? 'Poor' : 'Healthy'}
+              </div>
+              <div className="text-xs text-slate-400 mb-1">({dashboard.reputation.totalSent} sent)</div>
+            </div>
+          </div>
+          <div className="p-6 rounded-3xl bg-white border border-slate-200 shadow-sm">
+            <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Bounce Rate</div>
+            <div className="text-2xl font-black text-slate-900">{dashboard.reputation.bounceRate}%</div>
+          </div>
+          <div className="p-6 rounded-3xl bg-white border border-slate-200 shadow-sm">
+            <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Spam Complaints</div>
+            <div className="text-2xl font-black text-slate-900">{dashboard.reputation.spamRate}%</div>
+          </div>
+        </div>
+      )}
+
+      {dashboard && dashboard.recommendations.length > 0 && (
+        <div className="p-4 rounded-2xl bg-indigo-50 border border-indigo-100 flex flex-col gap-2">
+          <div className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider flex items-center gap-2">
+            <AlertCircle size={14} />
+            Recommendations
+          </div>
+          <ul className="space-y-1">
+            {dashboard.recommendations.map((rec: string, idx: number) => (
+              <li key={idx} className="text-xs text-indigo-900 font-medium">• {rec}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <div className="p-8 rounded-3xl bg-white border border-slate-200 shadow-sm">
         <div className="flex items-center justify-between mb-6">
           <h3 className="text-lg font-bold text-slate-900">Verified Domains</h3>

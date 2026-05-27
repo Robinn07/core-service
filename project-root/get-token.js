@@ -3,7 +3,7 @@ const admin = require('./src/config/firebase').admin;
 async function getTestToken(uid) {
   try {
     // This creates a custom token tied DIRECTLY to your project ID
-    const customToken = await admin.auth().createCustomToken(uid);
+    const customToken = await admin.auth().createCustomToken(uid, { orgId: 'crm-system' });
     console.log("--- YOUR PROJECT TOKEN ---");
     console.log(customToken);
     console.log("--------------------------");
