@@ -1,5 +1,6 @@
 import { Loader2, Sparkles, Users } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { api } from "../../lib/api";
 import { ActionModal } from "../../components/ActionModal";
 
@@ -7,6 +8,7 @@ export function AudiencePage() {
   const [subscribers, setSubscribers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
     fetchSubscribers();
@@ -78,7 +80,7 @@ export function AudiencePage() {
         ) : subscribers.length > 0 ? (
           <div className="divide-y divide-slate-100">
             {subscribers.map((sub) => (
-              <div key={sub.id} className="grid grid-cols-6 p-4 text-sm items-center hover:bg-slate-50 transition cursor-pointer">
+              <div key={sub.id} onClick={() => navigate('/dashboard/audience/' + sub.id)} className="grid grid-cols-6 p-4 text-sm items-center hover:bg-slate-50 transition cursor-pointer">
                 <div className="col-span-2">
                   <div className="font-medium text-slate-900">{sub.email}</div>
                   <div className="text-xs text-slate-500 mt-0.5">{sub.attributes?.name || 'No name provided'}</div>

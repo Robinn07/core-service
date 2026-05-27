@@ -219,16 +219,71 @@ exports.batchVerify = async (req, res) => {
 
 exports.getSubscriberById = async (req, res) => {
   try {
+    const { id } = req.params;
+    const orgId = req.user.orgId;
+    const cacheKey = `subscriber:${id}:profile`;
+
+    // 1. Check Cache
+    const cachedProfile = await redis.get(cacheKey);
+    if (cachedProfile) {
+      return res.json(JSON.parse(cachedProfile));
+    }
+
+    // 2. Fetch from DB
     const subscriber = await Subscriber.findOne({ 
-      where: { id: req.params.id, orgId: req.user.orgId },
+      where: { id, orgId },
       include: [
-        { model: List, through: { attributes: [] } },
-        { model: Tag, through: { attributes: [] } }
+        { model: List, through: { attributes: [] }, attributes: ['id', 'name'] },
+        { model: Tag, through: { attributes: [] }, attributes: ['id', 'name'] },
+        { model: EventLog, limit: 50, order: [['createdAt', 'DESC']] },
+        { model: ConsentLog, limit: 20, order: [['createdAt', 'DESC']] }
       ]
     });
+    
     if (!subscriber) return res.status(404).json({ error: 'Not found' });
-    res.json(subscriber);
+
+    // 3. Format AI Scores safely
+    const profile = subscriber.toJSON();
+    if (profile.leadScore === null) profile.leadScore = null; // Ensuring it's exactly null, not undefined
+    if (profile.churnRisk === null) profile.churnRisk = "PENDING";
+    if (profile.leadTemperature === null) profile.leadTemperature = "PENDING";
+
+    // 4. Set Cache (TTL 60s)
+    await redis.setex(cacheKey, 60, JSON.stringify(profile));
+
+    res.json(profile);
   } catch (error) { res.status(500).json({ error: error.message }); }
+};
+
+exports.getSubscriberEvents = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const orgId = req.user.orgId;
+    const cursor = req.query.cursor || '';
+    const limit = parseInt(req.query.limit) || 20;
+
+    // Use axios to call the Analytics Service which talks to ClickHouse
+    const axios = require('axios');
+    const analyticsUrl = process.env.ANALYTICS_SERVICE_URL || 'http://localhost:8081';
+    
+    // We pass a dummy token or rely on internal auth, but the Analytics service requires a token.
+    // For this internal proxy, we might need a service token, but Analytics is expecting the JWT.
+    // We will forward the authorization header.
+    
+    const response = await axios.get(`${analyticsUrl}/analytics/${orgId}/users/${id}/events`, {
+      params: { cursor, limit },
+      headers: {
+        Authorization: req.headers.authorization
+      }
+    });
+
+    res.json(response.data);
+  } catch (error) {
+    if (error.response) {
+      return res.status(error.response.status).json(error.response.data);
+    }
+    res.status(500).json({ error: error.message });
+  }
 };
 
 exports.updateSubscriber = async (req, res) => {

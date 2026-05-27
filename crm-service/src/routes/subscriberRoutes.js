@@ -18,6 +18,7 @@ router.post('/batch-verify', authorize(['ADMIN', 'EDITOR']), subscriberControlle
 router.get('/', subscriberController.getAllSubscribers);
 router.get('/:id/export', subscriberController.exportData);
 router.get('/:id', subscriberController.getSubscriberById);
+router.get('/:id/events', subscriberController.getSubscriberEvents);
 router.put('/:id', authorize(['ADMIN', 'EDITOR']), subscriberController.updateSubscriber);
 router.delete('/:id', authorize(['ADMIN']), subscriberController.deleteSubscriber);
 

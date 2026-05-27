@@ -1,4 +1,6 @@
 import { Navigate, Route, Routes } from "react-router-dom";
+import { Suspense, lazy } from "react";
+import { Loader2 } from "lucide-react";
 import { GuestRoute, ProtectedRoute } from "./components/AuthGuards";
 import DashboardPage from "./pages/DashboardPage";
 import LandingPage from "./pages/LandingPage";
@@ -15,6 +17,8 @@ import { TemplatesPage } from "./pages/dashboard/TemplatesPage";
 import { AutomationsPage } from "./pages/dashboard/AutomationsPage";
 import { SettingsPage } from "./pages/dashboard/SettingsPage";
 import SignUpPage from "./pages/SignUpPage";
+
+const ContactProfilePage = lazy(() => import("./pages/dashboard/ContactProfilePage"));
 
 export default function App() {
   return (
@@ -54,6 +58,11 @@ export default function App() {
         <Route path="analytics" element={<AnalyticsPage />} />
         <Route path="integrations" element={<IntegrationsPage />} />
         <Route path="audience" element={<AudiencePage />} />
+        <Route path="audience/:id" element={
+          <Suspense fallback={<div className="flex justify-center py-20"><Loader2 className="animate-spin text-indigo-600" size={32} /></div>}>
+            <ContactProfilePage />
+          </Suspense>
+        } />
         <Route path="settings" element={<SettingsPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

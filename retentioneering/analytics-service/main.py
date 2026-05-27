@@ -267,6 +267,44 @@ def campaign_impact(org_id: str, campaign_id: str, target_event: str, window_hou
     enforce_rls(token['uid'], org_id)
     return calculate_campaign_impact(ch_client, org_id, campaign_id, target_event, window_hours, fallback_hours)
 
+@app.get("/analytics/{org_id}/users/{user_id}/events")
+def user_events(org_id: str, user_id: str, cursor: str = None, limit: int = 20, token: dict = Security(verify_token)):
+    enforce_rls(token['uid'], org_id)
+    
+    # Query ClickHouse for real behavioral product events
+    # Ensure ordered by timestamp DESC
+    query = """
+    SELECT event_type as event_name, metadata as properties, timestamp
+    FROM events
+    WHERE org_id = {org:String} AND user_id = {user:String}
+    """
+    params = {'org': org_id, 'user': user_id, 'limit': limit}
+    
+    if cursor:
+        query += " AND timestamp < {cursor:DateTime64(3)}"
+        params['cursor'] = cursor
+        
+    query += " ORDER BY timestamp DESC LIMIT {limit:UInt16}"
+    
+    result = ch_client.query(query, parameters=params)
+    rows = result.result_rows
+    
+    data = []
+    next_cursor = None
+    if rows:
+        for row in rows:
+            data.append({
+                "event_name": row[0],
+                "properties": row[1],
+                "timestamp": row[2].isoformat() if hasattr(row[2], 'isoformat') else str(row[2])
+            })
+        
+        # If we got 'limit' rows, there might be more. Set cursor to the last timestamp.
+        if len(rows) == limit:
+            next_cursor = str(rows[-1][2])
+
+    return {"data": data, "nextCursor": next_cursor}
+
 @app.post("/analytics/{org_id}/refresh")
 def refresh_analytics(org_id: str, token: dict = Depends(require_role(["admin"]))):
     enforce_rls(token['uid'], org_id)
