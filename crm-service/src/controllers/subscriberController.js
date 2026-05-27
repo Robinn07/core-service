@@ -287,6 +287,62 @@ exports.getSubscriberEvents = async (req, res) => {
   }
 };
 
+exports.addTagToSubscriber = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { tagName } = req.body;
+    const orgId = req.user.orgId;
+
+    if (!tagName || !tagName.trim()) {
+      return res.status(400).json({ error: 'Tag name is required' });
+    }
+
+    const subscriber = await Subscriber.findOne({ where: { id, orgId } });
+    if (!subscriber) return res.status(404).json({ error: 'Subscriber not found' });
+
+    // Find or create the tag
+    let [tag] = await Tag.findOrCreate({
+      where: { name: tagName.trim(), orgId },
+      defaults: { description: 'Added from profile UI' }
+    });
+
+    // Add relation
+    await subscriber.addTag(tag);
+
+    // Invalidate Cache
+    await redis.del(`subscriber:${id}:profile`);
+
+    // Emit event
+    appEmitter.emit('tag_added', { subscriber, tagName: tag.name });
+
+    res.json(tag);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+exports.removeTagFromSubscriber = async (req, res) => {
+  try {
+    const { id, tagId } = req.params;
+    const orgId = req.user.orgId;
+
+    const subscriber = await Subscriber.findOne({ where: { id, orgId } });
+    if (!subscriber) return res.status(404).json({ error: 'Subscriber not found' });
+
+    const tag = await Tag.findOne({ where: { id: tagId, orgId } });
+    if (!tag) return res.status(404).json({ error: 'Tag not found' });
+
+    await subscriber.removeTag(tag);
+
+    // Invalidate Cache
+    await redis.del(`subscriber:${id}:profile`);
+
+    res.json({ message: 'Tag removed successfully' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
 exports.updateSubscriber = async (req, res) => {
   try {
     const { firstName, lastName, attributes, status, listIds, tagIds, timezone, preferredSendHour, preferences } = req.body;

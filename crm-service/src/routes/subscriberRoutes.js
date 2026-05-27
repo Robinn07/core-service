@@ -19,6 +19,8 @@ router.get('/', subscriberController.getAllSubscribers);
 router.get('/:id/export', subscriberController.exportData);
 router.get('/:id', subscriberController.getSubscriberById);
 router.get('/:id/events', subscriberController.getSubscriberEvents);
+router.post('/:id/tags', authorize(['ADMIN', 'EDITOR']), subscriberController.addTagToSubscriber);
+router.delete('/:id/tags/:tagId', authorize(['ADMIN', 'EDITOR']), subscriberController.removeTagFromSubscriber);
 router.put('/:id', authorize(['ADMIN', 'EDITOR']), subscriberController.updateSubscriber);
 router.delete('/:id', authorize(['ADMIN']), subscriberController.deleteSubscriber);
 

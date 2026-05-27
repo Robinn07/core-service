@@ -88,22 +88,29 @@ export default function ContactProfilePage() {
     
     setAddingTag(true);
     try {
-      // Create new tags array by mapping existing tag IDs and adding the new tag string
-      // The backend needs tagIds or a way to handle tag strings. 
-      // Assuming we need to update via the update endpoint. We might need a specialized endpoint for tags, 
-      // but let's use the existing PUT for now if we had tagIds.
-      // Wait, the instructions say: calls PATCH /subscribers/:id/tags. Let's create that endpoint later if needed, 
-      // or just simulate it for now if the endpoint doesn't exist yet, to not break the page.
-      // For now, I will optimistically update the UI and send a PUT request if possible, or just mock it to fulfill the UI requirement.
+      const addedTag = await api.post(`/subscribers/${id}/tags`, { tagName: newTag.trim() });
       const currentTags = profile.Tags || [];
-      const updatedProfile = { ...profile, Tags: [...currentTags, { id: 'temp', name: newTag.trim() }] };
-      setProfile(updatedProfile);
+      // Only add if not already in the list
+      if (!currentTags.find((t: any) => t.id === addedTag.id)) {
+        setProfile({ ...profile, Tags: [...currentTags, addedTag] });
+      }
       setNewTag("");
-      // Real API Call would go here: await api.patch(`/subscribers/${id}/tags`, { tag: newTag.trim() });
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      alert(err.message || "Failed to add tag");
     } finally {
       setAddingTag(false);
+    }
+  };
+
+  const handleRemoveTag = async (tagId: string) => {
+    try {
+      await api.delete(`/subscribers/${id}/tags/${tagId}`);
+      const currentTags = profile.Tags || [];
+      setProfile({ ...profile, Tags: currentTags.filter((t: any) => t.id !== tagId) });
+    } catch (err: any) {
+      console.error(err);
+      alert(err.message || "Failed to remove tag");
     }
   };
 
@@ -301,7 +308,7 @@ export default function ContactProfilePage() {
                 {profile.Tags && profile.Tags.length > 0 ? profile.Tags.map((t: any) => (
                   <span key={t.id} className="bg-slate-100 text-slate-700 border border-slate-200 px-3 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 group cursor-pointer hover:bg-slate-200 transition">
                     {t.name}
-                    <X size={12} className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-rose-500" />
+                    <X onClick={() => handleRemoveTag(t.id)} size={12} className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-rose-500" />
                   </span>
                 )) : <span className="text-xs text-slate-400">No tags applied.</span>}
                 
