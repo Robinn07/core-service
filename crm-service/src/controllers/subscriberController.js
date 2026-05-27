@@ -2,6 +2,7 @@ const { Subscriber, List, Tag, EventLog, ConsentLog } = require('../models');
 const { Op } = require('sequelize');
 const crmService = require('../services/crmService');
 const appEmitter = require('../utils/events');
+const redis = require('../config/redis');
 
 const doiService = require('../services/doiService');
 
