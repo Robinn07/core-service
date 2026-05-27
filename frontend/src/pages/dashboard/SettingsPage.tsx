@@ -1,6 +1,7 @@
-import { Globe, Lock, Mail, Save, ShieldCheck, Smartphone } from "lucide-react";
+import { Globe, Lock, Mail, Save, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "../../auth/AuthProvider";
+import { DomainSettings } from "../../components/DomainSettings";
 
 export function SettingsPage() {
   const { user } = useAuth();
@@ -76,44 +77,7 @@ export function SettingsPage() {
           )}
 
           {activeTab === "domains" && (
-            <div className="space-y-6">
-              <div className="p-8 rounded-3xl bg-white border border-slate-200 shadow-sm">
-                <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-lg font-bold text-slate-900">Verified Domains</h3>
-                  <button className="rounded-xl bg-slate-900 px-4 py-2 text-xs font-bold text-white hover:bg-slate-800 transition">
-                    + Add Domain
-                  </button>
-                </div>
-                
-                <div className="space-y-4">
-                  <div className="py-12 text-center border border-dashed border-slate-200 rounded-3xl">
-                    <Globe size={40} className="text-slate-300 mx-auto mb-4" />
-                    <div className="text-sm font-bold text-slate-900">No Verified Domains</div>
-                    <p className="text-xs text-slate-500 mt-1 mb-6 max-w-[200px] mx-auto">Add a domain to start sending professional marketing emails.</p>
-                    <button className="rounded-xl border border-slate-200 px-6 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition">
-                       Learn about verification
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-8 rounded-3xl bg-amber-50 border border-amber-100 shadow-sm">
-                <div className="flex items-start gap-4">
-                  <div className="p-3 bg-white rounded-2xl text-amber-600 shadow-sm">
-                    <Smartphone size={24} />
-                  </div>
-                  <div>
-                    <h3 className="text-amber-900 font-bold">Improve Deliverability</h3>
-                    <p className="text-sm text-amber-700 mt-1 leading-relaxed">
-                      To ensure your emails don't end up in spam, please configure your **SPF, DKIM, and DMARC** records in your DNS provider (Cloudflare, GoDaddy, etc.).
-                    </p>
-                    <button className="mt-4 text-xs font-bold text-amber-900 hover:underline">
-                      View DNS Configuration Guide &rarr;
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <DomainSettings />
           )}
 
           {activeTab === "security" && (

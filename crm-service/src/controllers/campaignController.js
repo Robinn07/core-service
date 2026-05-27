@@ -7,6 +7,7 @@ exports.createCampaign = async (req, res) => {
     const { 
       name, 
       type, 
+      templateId,
       abTestConfig, 
       scheduledAt, 
       timezone, 
@@ -19,6 +20,7 @@ exports.createCampaign = async (req, res) => {
     const campaign = await Campaign.create({ 
       name, 
       type, 
+      templateId,
       abTestConfig, 
       scheduledAt, 
       timezone, 
@@ -29,6 +31,45 @@ exports.createCampaign = async (req, res) => {
       orgId 
     });
     res.status(201).json(campaign);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+exports.updateCampaign = async (req, res) => {
+  try {
+    const orgId = req.user.orgId;
+    const { id } = req.params;
+    const { 
+      name, 
+      type, 
+      templateId,
+      abTestConfig, 
+      scheduledAt, 
+      timezone, 
+      deliverAtLocalTime, 
+      segmentConfig, 
+      healthThresholds, 
+      successConfig 
+    } = req.body;
+
+    const campaign = await Campaign.findOne({ where: { id, orgId } });
+    if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+
+    await campaign.update({ 
+      name, 
+      type, 
+      templateId,
+      abTestConfig, 
+      scheduledAt, 
+      timezone, 
+      deliverAtLocalTime, 
+      segmentConfig, 
+      healthThresholds, 
+      successConfig 
+    });
+
+    res.json(campaign);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

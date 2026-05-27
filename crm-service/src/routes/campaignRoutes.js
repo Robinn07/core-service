@@ -6,6 +6,7 @@ const { authenticate, authorize } = require('../middleware/auth');
 router.use(authenticate);
 
 router.post('/', authorize(['ADMIN', 'EDITOR']), campaignController.createCampaign);
+router.put('/:id', authorize(['ADMIN', 'EDITOR']), campaignController.updateCampaign);
 router.get('/', campaignController.getAllCampaigns);
 router.post('/:id/send', authorize(['ADMIN', 'EDITOR']), campaignController.sendCampaign);
 router.get('/:id/status', campaignController.getCampaignStatus);

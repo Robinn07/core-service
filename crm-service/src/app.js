@@ -38,9 +38,9 @@ require('./models');
 const app = express();
 
 // Sentry Request Handler must be the first middleware on the app
-app.use(Sentry.Handlers.requestHandler());
+// app.use(Sentry.Handlers.requestHandler());
 // TracingHandler creates a trace for every incoming request
-app.use(Sentry.Handlers.tracingHandler());
+// app.use(Sentry.Handlers.tracingHandler());
 
 // 1. Security Headers
 app.use(helmet());
@@ -179,7 +179,7 @@ app.use('/api/public', require('./routes/publicRoutes'));
 app.use('/api/ses', express.text({ type: 'text/plain' }), require('./routes/sesRoutes'));
 
 // The error handler must be before any other error middleware and after all controllers
-app.use(Sentry.Handlers.errorHandler());
+// app.use(Sentry.Handlers.errorHandler());
 
 const cron = require('node-cron');
 const { EventLog } = require('./models');

@@ -108,7 +108,7 @@ exports.getDeliverabilityDashboard = async (req, res) => {
       },
       attributes: [
         'type',
-        [require('../models').sequelize.fn('COUNT', require('../models').sequelize.col('id')), 'count']
+        [require('sequelize').fn('COUNT', require('sequelize').col('id')), 'count']
       ],
       group: ['type']
     });

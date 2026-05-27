@@ -23,6 +23,10 @@ const Campaign = sequelize.define('Campaign', {
     type: DataTypes.ENUM('REGULAR', 'AB_TEST'),
     defaultValue: 'REGULAR'
   },
+  templateId: {
+    type: DataTypes.UUID,
+    allowNull: true
+  },
   abTestConfig: {
     type: DataTypes.JSONB,
     allowNull: true
