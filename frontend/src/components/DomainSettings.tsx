@@ -1,4 +1,4 @@
-import { AlertCircle, CheckCircle2, Copy, ExternalLink, Globe, Loader2, RefreshCw, ShieldCheck, Smartphone } from "lucide-react";
+import { AlertCircle, CheckCircle2, Copy, ExternalLink, Globe, Loader2, Plus, RefreshCw, ShieldCheck, Smartphone, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api } from "../lib/api";
 
@@ -6,50 +6,68 @@ export function DomainSettings() {
   const [domains, setDomains] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [addingDomain, setAddingDomain] = useState(false);
+  const [showAddForm, setShowAddForm] = useState(false);
   const [newDomainName, setNewDomainName] = useState("");
   const [selectedDomain, setSelectedDomain] = useState<any>(null);
   const [dnsRecords, setDnsRecords] = useState<any>(null);
   const [verifying, setVerifying] = useState(false);
   const [dashboard, setDashboard] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchDomains();
-    fetchDashboard();
+    fetchInitialData();
   }, []);
 
-  const fetchDomains = async () => {
+  const fetchInitialData = async () => {
+    setLoading(true);
+    setError(null);
     try {
-      const data = await api.get("/domains");
-      setDomains(data);
-    } catch (error) {
-      console.error("Failed to fetch domains:", error);
+      await Promise.all([fetchDomains(), fetchDashboard()]);
+    } catch (err: any) {
+      setError("Failed to load domain data. Please try again.");
     } finally {
       setLoading(false);
     }
+  };
+
+  const fetchDomains = async () => {
+    const data = await api.get("/domains");
+    setDomains(data);
   };
 
   const fetchDashboard = async () => {
     try {
       const data = await api.get("/domains/dashboard");
       setDashboard(data);
-    } catch (error) {
-      console.error("Failed to fetch dashboard:", error);
+    } catch (err) {
+      console.warn("Dashboard metrics unavailable");
     }
   };
 
   const handleAddDomain = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newDomainName.trim()) return;
+    const domain = newDomainName.trim().toLowerCase();
+    if (!domain) return;
+    
+    // Simple domain validation
+    if (!domain.includes('.') || domain.length < 4) {
+      alert("Please enter a valid domain name (e.g., example.com)");
+      return;
+    }
+
     setAddingDomain(true);
+    setError(null);
     try {
-      const domain = await api.post("/domains", { domainName: newDomainName.trim() });
-      setDomains([...domains, domain]);
+      const result = await api.post("/domains", { domainName: domain });
+      setDomains(prev => [...prev, result]);
       setNewDomainName("");
-      setSelectedDomain(domain);
-      fetchDnsRecords(domain.id);
-    } catch (error) {
-      console.error("Failed to add domain:", error);
-      alert("Failed to add domain. Please check if it's a valid domain name.");
+      setShowAddForm(false);
+      setSelectedDomain(result);
+      fetchDnsRecords(result.id);
+      fetchDashboard(); // Refresh metrics
+    } catch (err: any) {
+      console.error("Add domain error:", err);
+      setError(err.message || "Failed to add domain. Ensure the name is valid and not already registered.");
     } finally {
       setAddingDomain(false);
     }
@@ -59,8 +77,8 @@ export function DomainSettings() {
     try {
       const data = await api.get(`/domains/${domainId}/dns`);
       setDnsRecords(data);
-    } catch (error) {
-      console.error("Failed to fetch DNS records:", error);
+    } catch (err) {
+      console.error("DNS fetch error:", err);
     }
   };
 
@@ -69,14 +87,13 @@ export function DomainSettings() {
     try {
       const updatedDomain = await api.post(`/domains/${domainId}/verify`, {});
       if (updatedDomain.verificationStatus === 'verified') {
-        alert("Domain verified successfully!");
+        alert("Success! Your domain has been verified.");
       } else {
-        alert("Verification pending. Please ensure DNS records are propagated.");
+        alert("Verification check initiated. If you just added the DNS records, please allow up to 48 hours for propagation.");
       }
       fetchDomains();
-    } catch (error) {
-      console.error("Verification error:", error);
-      alert("Failed to trigger verification.");
+    } catch (err: any) {
+      alert(err.message || "Verification check failed.");
     } finally {
       setVerifying(false);
     }
@@ -84,19 +101,34 @@ export function DomainSettings() {
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
-    // You could add a toast notification here
   };
 
   if (loading) {
     return (
-      <div className="py-20 flex justify-center">
+      <div className="py-20 flex flex-col items-center justify-center gap-4">
         <Loader2 className="animate-spin text-indigo-600" size={32} />
+        <p className="text-sm font-medium text-slate-500">Loading domain settings...</p>
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
+      {/* Debug Info (Helpful for ensuring latest code is running) */}
+      <div className="flex justify-end">
+        <span className="text-[10px] font-mono text-slate-400">Component v1.2-Overhaul</span>
+      </div>
+
+      {error && (
+        <div className="p-4 rounded-2xl bg-rose-50 border border-rose-100 flex items-center gap-3 text-rose-800 text-sm animate-in fade-in zoom-in">
+          <AlertCircle size={18} />
+          <span>{error}</span>
+          <button onClick={() => setError(null)} className="ml-auto hover:bg-rose-100 p-1 rounded-lg">
+            <X size={16} />
+          </button>
+        </div>
+      )}
+
       {dashboard && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="p-6 rounded-3xl bg-white border border-slate-200 shadow-sm">
@@ -136,31 +168,51 @@ export function DomainSettings() {
       <div className="p-8 rounded-3xl bg-white border border-slate-200 shadow-sm">
         <div className="flex items-center justify-between mb-6">
           <h3 className="text-lg font-bold text-slate-900">Verified Domains</h3>
-          <form onSubmit={handleAddDomain} className="flex gap-2">
-            <input
-              type="text"
-              placeholder="e.g. example.com"
-              value={newDomainName}
-              onChange={(e) => setNewDomainName(e.target.value)}
-              className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm outline-none transition focus:border-indigo-500 focus:bg-white"
-              required
-            />
-            <button 
-              type="submit"
-              disabled={addingDomain}
-              className="rounded-xl bg-slate-900 px-4 py-2 text-xs font-bold text-white hover:bg-slate-800 transition disabled:opacity-50 flex items-center gap-2"
-            >
-              {addingDomain ? <Loader2 size={14} className="animate-spin" /> : null}
-              Add Domain
-            </button>
-          </form>
+          <button 
+            onClick={() => setShowAddForm(!showAddForm)}
+            className={`rounded-xl px-4 py-2 text-xs font-bold transition flex items-center gap-2 ${
+              showAddForm ? "bg-slate-100 text-slate-600 hover:bg-slate-200" : "bg-slate-900 text-white hover:bg-slate-800"
+            }`}
+          >
+            {showAddForm ? <X size={14} /> : <Plus size={14} />}
+            {showAddForm ? "Cancel" : "Add Domain"}
+          </button>
         </div>
+
+        {showAddForm && (
+          <form onSubmit={handleAddDomain} className="mb-8 p-6 rounded-2xl bg-slate-50 border border-slate-100 animate-in slide-in-from-top-4">
+            <div className="flex flex-col md:flex-row gap-4">
+              <div className="flex-1 space-y-2">
+                <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Domain Name</label>
+                <input
+                  type="text"
+                  placeholder="e.g. example.com"
+                  value={newDomainName}
+                  onChange={(e) => setNewDomainName(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-indigo-500 shadow-sm"
+                  autoFocus
+                  required
+                />
+              </div>
+              <div className="flex items-end">
+                <button 
+                  type="submit"
+                  disabled={addingDomain}
+                  className="w-full md:w-auto h-[46px] rounded-xl bg-indigo-600 px-8 text-sm font-bold text-white hover:bg-indigo-700 transition disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg shadow-indigo-100"
+                >
+                  {addingDomain ? <Loader2 size={16} className="animate-spin" /> : <Globe size={16} />}
+                  Connect Domain
+                </button>
+              </div>
+            </div>
+          </form>
+        )}
         
         <div className="space-y-4">
           {domains.length > 0 ? (
             <div className="divide-y divide-slate-100">
               {domains.map((domain) => (
-                <div key={domain.id} className="py-4 flex items-center justify-between">
+                <div key={domain.id} className="py-4 flex flex-wrap items-center justify-between gap-4">
                   <div className="flex items-center gap-4">
                     <div className={`p-2 rounded-xl ${domain.verificationStatus === 'verified' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
                       <Globe size={20} />
@@ -206,13 +258,19 @@ export function DomainSettings() {
               <Globe size={40} className="text-slate-300 mx-auto mb-4" />
               <div className="text-sm font-bold text-slate-900">No Verified Domains</div>
               <p className="text-xs text-slate-500 mt-1 mb-6 max-w-[200px] mx-auto">Add a domain to start sending professional marketing emails.</p>
+              <button 
+                onClick={() => setShowAddForm(true)}
+                className="text-xs font-bold text-indigo-600 hover:text-indigo-700 flex items-center gap-2 mx-auto"
+              >
+                <Plus size={14} /> Add your first domain
+              </button>
             </div>
           )}
         </div>
       </div>
 
       {selectedDomain && dnsRecords && (
-        <div className="p-8 rounded-3xl bg-white border border-slate-200 shadow-sm animate-in fade-in slide-in-from-top-4">
+        <div className="p-8 rounded-3xl bg-white border border-slate-200 shadow-sm animate-in fade-in slide-in-from-top-4 scroll-mt-8" id="dns-config">
           <div className="flex items-center justify-between mb-6">
             <div>
               <h3 className="text-lg font-bold text-slate-900">DNS Configuration: {selectedDomain.domainName}</h3>
