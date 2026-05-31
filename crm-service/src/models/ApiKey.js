@@ -18,9 +18,10 @@ const ApiKey = sequelize.define('ApiKey', {
   keyHash: {
     type: DataTypes.STRING,
     allowNull: false,
-    unique: true
+    unique: true,
+    index: true
   },
-  keyPrefix: {
+  mask: {
     type: DataTypes.STRING,
     allowNull: false
   },

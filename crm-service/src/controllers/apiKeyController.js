@@ -4,20 +4,22 @@ const { ApiKey } = require('../models');
 exports.generateKey = async (req, res) => {
   try {
     const { name, scopes } = req.body;
-    const orgId = req.user?.orgId || req.headers['x-org-id'];
+    const orgId = req.user?.orgId;
 
     if (!name) {
-      return res.status(400).json({ error: 'name is required' });
+      return res.status(400).json({ error: 'Key name is required' });
     }
 
     const { apiKey, record } = await apiKeyService.createKey(orgId, name, scopes);
     
-    // We only return the raw API Key ONCE during creation
+    // Return raw API Key ONLY during creation
     res.status(201).json({
       apiKey,
       id: record.id,
       name: record.name,
-      scopes: record.scopes
+      mask: record.mask,
+      scopes: record.scopes,
+      createdAt: record.createdAt
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -26,10 +28,11 @@ exports.generateKey = async (req, res) => {
 
 exports.getKeys = async (req, res) => {
   try {
-    const orgId = req.user?.orgId || req.headers['x-org-id'];
+    const orgId = req.user?.orgId;
     const keys = await ApiKey.findAll({
       where: { orgId },
-      attributes: ['id', 'name', 'keyPrefix', 'scopes', 'lastUsedAt', 'isActive', 'createdAt']
+      attributes: ['id', 'name', 'mask', 'scopes', 'lastUsedAt', 'isActive', 'createdAt'],
+      order: [['createdAt', 'DESC']]
     });
     res.json(keys);
   } catch (error) {
@@ -40,14 +43,14 @@ exports.getKeys = async (req, res) => {
 exports.revokeKey = async (req, res) => {
   try {
     const { id } = req.params;
-    const orgId = req.user?.orgId || req.headers['x-org-id'];
+    const orgId = req.user?.orgId;
 
-    const apiKey = await ApiKey.findOne({ where: { id, orgId } });
-    if (!apiKey) {
-      return res.status(404).json({ error: 'API Key not found' });
+    const success = await apiKeyService.revokeKey(id, orgId);
+    
+    if (!success) {
+      return res.status(404).json({ error: 'API Key not found or unauthorized' });
     }
 
-    await apiKey.update({ isActive: false });
     res.json({ message: 'API Key revoked successfully' });
   } catch (error) {
     res.status(500).json({ error: error.message });

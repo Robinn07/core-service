@@ -4,14 +4,18 @@ const apiKeyService = require('../services/apiKeyService');
 const { UserRole } = require('../models');
 
 const authenticate = async (req, res, next) => {
-  // 1. Skip Auth for local dev
-  if (process.env.SKIP_AUTH === 'true') {
-    req.user = { uid: 'dev-user', email: 'dev@example.com', orgId: 'crm-system', role: 'ADMIN' };
-    return next();
+  // 1. Check for API Key first (Programmatic access)
+  // We do this BEFORE Skip Auth because we want to test API keys even in dev
+  const authHeader = req.headers.authorization;
+  let apiKey = req.headers['x-api-key'];
+
+  if (!apiKey && authHeader && authHeader.startsWith('Bearer ') && authHeader.length > 30) {
+      const token = authHeader.split('Bearer ')[1];
+      if (token.startsWith('glx_')) {
+          apiKey = token;
+      }
   }
 
-  // 2. Check for API Key first (Programmatic access)
-  const apiKey = req.headers['x-api-key'];
   if (apiKey) {
     const keyData = await apiKeyService.validateKey(apiKey);
     if (keyData) {
@@ -25,8 +29,13 @@ const authenticate = async (req, res, next) => {
     return res.status(403).json({ error: 'Unauthorized: Invalid API Key' });
   }
 
+  // 2. Skip Auth for local dev (Dashboard simulation)
+  if (process.env.SKIP_AUTH === 'true') {
+    req.user = { uid: 'dev-user', email: 'dev@example.com', orgId: 'crm-system', role: 'ADMIN' };
+    return next();
+  }
+
   // 3. Check for Firebase Bearer Token (Dashboard access)
-  const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return res.status(401).json({ error: 'Unauthorized: No credentials provided' });
   }
