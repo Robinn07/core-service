@@ -322,22 +322,18 @@ async def main():
     # Start the polling routine in the background
     # In a real app, this would run as a separate worker process or a scheduled task.
     # For demo purposes, we'll run it once for immediate feedback.
-    print(f"
-Running domain verification poller once...")
+    print(f"\nRunning domain verification poller once...")
     await poll_domain_verification() # Run once for immediate effect in demo
 
-    print(f"
-Checking status of {domain_to_verify_1} after polling:")
+    print(f"\nChecking status of {domain_to_verify_1} after polling:")
     status_1 = await check_domain_status_endpoint(domain_to_verify_1)
     print(status_1)
 
-    print(f"
-Checking status of {domain_to_verify_2} after polling:")
+    print(f"\nChecking status of {domain_to_verify_2} after polling:")
     status_2 = await check_domain_status_endpoint(domain_to_verify_2)
     print(status_2)
 
-    print("
---- End of Demo ---")
+    print("\n--- End of Demo ---")
 
 if __name__ == "__main__":
     # To run this script, you'll need the 'dnspython' library:

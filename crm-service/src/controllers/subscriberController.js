@@ -237,7 +237,7 @@ exports.getSubscriberById = async (req, res) => {
         { model: List, through: { attributes: [] }, attributes: ['id', 'name'] },
         { model: Tag, through: { attributes: [] }, attributes: ['id', 'name'] },
         { model: EventLog, limit: 50, order: [['createdAt', 'DESC']] },
-        { model: ConsentLog, limit: 20, order: [['createdAt', 'DESC']] }
+        { model: ConsentLog, as: 'consentLogs', limit: 20, order: [['createdAt', 'DESC']] }
       ]
     });
     

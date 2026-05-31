@@ -3,7 +3,7 @@ const domainService = require('./src/services/domainService');
 const { Domain } = require('./src/models');
 
 async function testDomainRegistration() {
-  const domainName = 'getloopx.com';
+  const domainName = `test-${Date.now()}.org`;
   const orgId = 'test-org-123';
 
   console.log(`Attempting to register domain: ${domainName}...`);
