@@ -1,13 +1,11 @@
 const { UserRole } = require('../models');
+const emailQueue = require('../queue/emailQueue');
 
 exports.getTeamMembers = async (req, res) => {
   try {
     const orgId = req.user.orgId;
     const members = await UserRole.findAll({ where: { orgId } });
     
-    // We might not have email stored in UserRole, just uid.
-    // If you sync email, you'd join with a User table, but GetLoopX seems to rely on Firebase Auth.
-    // For now, we will return the user roles.
     res.json(members);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -17,15 +15,29 @@ exports.getTeamMembers = async (req, res) => {
 exports.inviteMember = async (req, res) => {
   try {
     const { email } = req.body;
+    const { orgId } = req.user;
+
     if (!email) {
       return res.status(400).json({ error: "Email is required" });
     }
     
-    // In a real application, you would:
-    // 1. Validate email format
-    // 2. Check if the user is already in the org
-    // 3. Send an actual invitation email
-    // For now, this acknowledges the action.
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+        return res.status(400).json({ error: "Invalid email format" });
+    }
+
+    // Queue the invitation email
+    await emailQueue.add('send-invitation', {
+        to: email,
+        orgId: orgId,
+        subject: 'You have been invited to join GetLoopX!',
+        template: 'invitation', // Assuming you have an 'invitation' template
+        context: {
+            orgId: orgId,
+            inviteLink: `${process.env.DASHBOARD_URL}/register?orgId=${orgId}`
+        }
+    });
     
     res.status(201).json({ message: "Invitation sent successfully" });
   } catch (error) {
@@ -38,7 +50,6 @@ exports.removeMember = async (req, res) => {
     const { id } = req.params;
     const orgId = req.user.orgId;
     
-    // Cannot remove self or primary admin logic should be here
     await UserRole.destroy({ where: { id, orgId } });
     res.json({ message: 'Member removed' });
   } catch (error) {
