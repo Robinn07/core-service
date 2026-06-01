@@ -67,7 +67,8 @@ module.exports = {
       interpreter: 'C:\\Users\\HP\\Desktop\\getloopx-core\\retentioneering\\analytics-service\\venv\\Scripts\\python.exe',
       autorestart: true,
       env: {
-        PYTHONUNBUFFERED: '1'
+        PYTHONUNBUFFERED: '1',
+        PYTHONIOENCODING: 'utf-8'
       }
     }
   ]

@@ -115,8 +115,16 @@ ANALYTICS_SERVICE_URL = os.getenv('ANALYTICS_SERVICE_URL', 'http://localhost:800
 # ... (rest of config)
 
 def notify_crm(org_id, user_id, event_type):
-    # ... existing notify_crm logic ...
-    pass
+    url = f"{CRM_SERVICE_URL}/api/events/notify"
+    payload = {
+        "orgId": org_id,
+        "userId": user_id,
+        "eventType": event_type
+    }
+    try:
+        requests.post(url, json=payload, timeout=2)
+    except Exception as e:
+        print(f"❌ CRM Notify Error: {e}")
 
 def check_toxic_paths(org_id, user_id):
     if not CRM_API_KEY: return
@@ -149,12 +157,27 @@ def trigger_path_crm(org_id, user_id, path_id):
 def callback(ch, method, properties, body):
     global batch, delivery_tags
     
-    # ... (OTel context extraction)
+    ctx = propagator.extract(carrier=properties.headers)
     
     with tracer.start_as_current_span("process_event", context=ctx) as span:
         try:
             data = json.loads(body)
-            # ... (Span attributes and row creation)
+            
+            # Row creation matching ClickHouse schema
+            row = [
+                data.get('event_id'),
+                data.get('org_id'),
+                data.get('user_id'),
+                data.get('event_type'),
+                data.get('channel'),
+                data.get('campaignId'),
+                data.get('ab_variant'),
+                data.get('timestamp'),
+                json.dumps(data.get('metadata', {}))
+            ]
+            
+            span.set_attribute("org_id", data.get('org_id', 'unknown'))
+            span.set_attribute("event_type", data.get('event_type', 'unknown'))
             
             # Notify CRM for behavioral triggers
             notify_crm(data['orgId'], data['userId'], data['event_type'])
@@ -163,7 +186,14 @@ def callback(ch, method, properties, body):
             check_toxic_paths(data['orgId'], data['userId'])
             
             batch.append(row)
-            # ... (Rest of callback)
+            delivery_tags.append(method.delivery_tag)
+            
+            if len(batch) >= BATCH_SIZE:
+                flush_batch(ch)
+        except Exception as e:
+            sentry_sdk.capture_exception(e)
+            print(f"❌ Callback Error: {e}")
+            handle_retry(ch, method, properties, body, str(e))
 
 # ── RabbitMQ Consumer ───────────────────────────────────────────
 def run_worker():
