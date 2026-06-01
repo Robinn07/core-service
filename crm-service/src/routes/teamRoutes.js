@@ -6,7 +6,7 @@ const { authenticate, authorize } = require('../middleware/auth');
 router.use(authenticate);
 
 router.get('/', teamController.getTeamMembers);
-router.post('/invite', authorize(['ADMIN']), teamController.inviteMember);
-router.delete('/:id', authorize(['ADMIN']), teamController.removeMember);
+router.post('/invite', authorize(['ADMIN', 'MANAGER']), teamController.inviteMember);
+router.delete('/:id', authorize(['ADMIN', 'MANAGER']), teamController.removeMember);
 
 module.exports = router;

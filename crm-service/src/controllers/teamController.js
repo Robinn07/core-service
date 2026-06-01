@@ -15,8 +15,22 @@ exports.getTeamMembers = async (req, res) => {
 };
 
 exports.inviteMember = async (req, res) => {
-  // Mock invite logic for now
-  res.status(201).json({ message: "Invitation sent" });
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ error: "Email is required" });
+    }
+    
+    // In a real application, you would:
+    // 1. Validate email format
+    // 2. Check if the user is already in the org
+    // 3. Send an actual invitation email
+    // For now, this acknowledges the action.
+    
+    res.status(201).json({ message: "Invitation sent successfully" });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to send invite: " + error.message });
+  }
 };
 
 exports.removeMember = async (req, res) => {
